@@ -5,7 +5,7 @@
 <a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/v/ctk-interactive-canvas.svg?maxAge=60%" alt="PyPi version"></a>
 <a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/status/ctk-interactive-canvas.svg?maxAge=60" alt="PyPi status"></a>
 <a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/dm/ctk-interactive-canvas.svg?maxAge=86400&label=installs&color=%2327B1FF" alt="PyPi downloads"></a>
-<a target="new" href="https://github.com/DeltaGa/ctk_interactive_canvas"><img border=0 src="https://img.shields.io/github/stars/DeltaGa/ctk-interactive-canvas.svg?style=social&label=Star&maxAge=60" alt="Star this repo"></a>
+<a target="new" href="https://github.com/DeltaGa/ctk_interactive_canvas"><img border=0 src="https://img.shields.io/github/stars/DeltaGa/ctk_interactive_canvas.svg?style=social&label=Star&maxAge=60" alt="Star this repo"></a>
 
 Interactive canvas widget for CustomTkinter with draggable, resizable rectangles featuring multi-selection, alignment, distribution, and professional-grade interaction controls.
 
