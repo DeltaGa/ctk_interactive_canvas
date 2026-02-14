@@ -1,10 +1,10 @@
 # CTk Interactive Canvas
 
-<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/badge/python-2.7,%203.6+-blue.svg?style=flat" alt="Python version"></a>
+<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/badge/python-3.9+-blue.svg?style=flat" alt="Python version"></a>
 <a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/v/ctk-interactive-canvas.svg?maxAge=60%" alt="PyPi version"></a>
 <a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/status/ctk-interactive-canvas.svg?maxAge=60" alt="PyPi status"></a>
 <a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/dm/ctk-interactive-canvas.svg?maxAge=86400&label=installs&color=%2327B1FF" alt="PyPi downloads"></a>
-<a target="new" href="https://github.com/DeltaGa/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/github/stars/DeltaGa/ctk-interactive-canvas.svg?style=social&label=Star&maxAge=60" alt="Star this repo"></a>
+<a target="new" href="https://github.com/DeltaGa/ctk_interactive_canvas"><img border=0 src="https://img.shields.io/github/stars/DeltaGa/ctk-interactive-canvas.svg?style=social&label=Star&maxAge=60" alt="Star this repo"></a>
 
 Interactive canvas widget for CustomTkinter with draggable, resizable rectangles featuring multi-selection, alignment, distribution, and professional-grade interaction controls.
 
@@ -248,7 +248,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Credits
 
 ### Author
-**Tchicdje Kouojip Joram Smith (DeltaGa)**
+**T. K. Joram Smith (DeltaGa)**
 - Email: dev.github.tkjoramsmith@outlook.com
 - GitHub: [@DeltaGa](https://github.com/DeltaGa)
 
@@ -258,11 +258,11 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please see [CONTRIBUTING.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CONTRIBUTING.md) for guidelines.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+See [CHANGELOG.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CHANGELOG.md) for version history.
 
 ## Support
 
