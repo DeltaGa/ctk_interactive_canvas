@@ -1,8 +1,10 @@
 # CTk Interactive Canvas
 
-[![PyPI version](https://badge.fury.io/py/ctk-interactive-canvas.svg)](https://badge.fury.io/py/ctk-interactive-canvas)
-[![Python Support](https://img.shields.io/pypi/pyversions/ctk-interactive-canvas.svg)](https://pypi.org/project/ctk-interactive-canvas/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/badge/python-2.7,%203.6+-blue.svg?style=flat" alt="Python version"></a>
+<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/v/ctk-interactive-canvas.svg?maxAge=60%" alt="PyPi version"></a>
+<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/status/ctk-interactive-canvas.svg?maxAge=60" alt="PyPi status"></a>
+<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/dm/ctk-interactive-canvas.svg?maxAge=86400&label=installs&color=%2327B1FF" alt="PyPi downloads"></a>
+<a target="new" href="https://github.com/DeltaGa/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/github/stars/DeltaGa/ctk-interactive-canvas.svg?style=social&label=Star&maxAge=60" alt="Star this repo"></a>
 
 Interactive canvas widget for CustomTkinter with draggable, resizable rectangles featuring multi-selection, alignment, distribution, and professional-grade interaction controls.
 
