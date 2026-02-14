@@ -96,7 +96,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def coords(self, tag_or_id: Any, *args: Any) -> Any:
         if type(tag_or_id) == str and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
             coords_id = self.find_withtag(tag_or_id)[0]
-            TkCanvas.coords(self, coords_id, *args[:2])
+            coords = TkCanvas.coords(self, coords_id, *args[:2])
             if len(args) == 3:
                 TkCanvas.itemconfigure(
                     self,
@@ -105,7 +105,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
                     text=self._get_char_from_radius(args[2]),
                 )
         elif type(tag_or_id) == int and tag_or_id in self._aa_circle_canvas_ids:
-            TkCanvas.coords(self, tag_or_id, *args[:2])
+            coords = TkCanvas.coords(self, tag_or_id, *args[:2])
 
             if len(args) == 3:
                 TkCanvas.itemconfigure(
@@ -118,7 +118,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             coords = TkCanvas.coords(self, tag_or_id, *args)
             if not coords:
                 return [0, 0, 0, 0]
-            return coords
+        return coords
 
     def create_draggable_rectangle(
         self,
