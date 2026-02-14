@@ -16,37 +16,18 @@ def main():
     root = ctk.CTk()
     root.title("CTk Interactive Canvas - Basic Example")
     root.geometry("800x600")
-    
+
     canvas = InteractiveCanvas(
-        root,
-        width=800,
-        height=600,
-        bg='white',
-        select_outline_color='#16fff6'
+        root, width=800, height=600, bg="white", select_outline_color="#16fff6"
     )
-    canvas.pack(fill='both', expand=True)
-    
-    rect1 = canvas.create_draggable_rectangle(
-        50, 50, 150, 150,
-        outline='blue',
-        width=2,
-        fill=''
-    )
-    
-    rect2 = canvas.create_draggable_rectangle(
-        200, 200, 300, 300,
-        outline='red',
-        width=2,
-        fill=''
-    )
-    
-    rect3 = canvas.create_draggable_rectangle(
-        400, 100, 500, 200,
-        outline='green',
-        width=2,
-        fill=''
-    )
-    
+    canvas.pack(fill="both", expand=True)
+
+    rect1 = canvas.create_draggable_rectangle(50, 50, 150, 150, outline="blue", width=2, fill="")
+
+    rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline="red", width=2, fill="")
+
+    rect3 = canvas.create_draggable_rectangle(400, 100, 500, 200, outline="green", width=2, fill="")
+
     print("Controls:")
     print("- Click and drag rectangles to move")
     print("- Drag bottom-right handle to resize")
@@ -59,7 +40,7 @@ def main():
     print("- Shift during resize: Maintain aspect ratio")
     print("- Ctrl during resize: Resize from center")
     print("- Alt during resize: Constrain to one axis")
-    
+
     root.mainloop()
 
 

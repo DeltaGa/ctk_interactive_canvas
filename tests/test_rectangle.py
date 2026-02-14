@@ -2,7 +2,6 @@
 Tests for DraggableRectangle.
 """
 
-import pytest
 from ctk_interactive_canvas import DraggableRectangle
 
 
@@ -19,7 +18,7 @@ def test_position_getters(rect):
     """Test position getter methods."""
     topleft = rect.get_topleft_pos()
     assert topleft == [10, 10]
-    
+
     size = rect.get_size()
     assert size == [90, 90]
 
@@ -28,7 +27,7 @@ def test_position_setters(rect):
     """Test position setter methods."""
     rect.set_topleft_pos([50, 50])
     assert rect.get_topleft_pos() == [50, 50]
-    
+
     rect.set_size([100, 100])
     assert rect.get_size() == [100, 100]
 
@@ -114,7 +113,7 @@ def test_union(canvas):
 
 def test_align(multiple_rects):
     """Test alignment."""
-    DraggableRectangle.align(multiple_rects, mode='top')
+    DraggableRectangle.align(multiple_rects, mode="top")
     positions = [rect.get_topleft_pos() for rect in multiple_rects]
     y_coords = [pos[1] for pos in positions]
     assert len(set(y_coords)) == 1
@@ -122,7 +121,7 @@ def test_align(multiple_rects):
 
 def test_distribute(multiple_rects):
     """Test distribution."""
-    DraggableRectangle.distribute(multiple_rects, mode='horizontal')
+    DraggableRectangle.distribute(multiple_rects, mode="horizontal")
     positions = [rect.get_topleft_pos() for rect in multiple_rects]
     assert positions[0][0] < positions[1][0] < positions[2][0]
 
