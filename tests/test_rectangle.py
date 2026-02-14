@@ -81,9 +81,10 @@ def test_magic_iter(rect):
 
 def test_comparison_eq(canvas):
     """Test equality comparison."""
+    # Create a rectangle and copy it with no offset
     rect1 = canvas.create_draggable_rectangle(10, 10, 100, 100)
-    rect2 = canvas.create_draggable_rectangle(10, 10, 100, 100)
-    assert rect1 == rect2
+    rect2_copy = rect1.copy_(offset=[0, 0])  # Same position as rect1
+    assert rect1 == rect2_copy
 
 
 def test_comparison_lt(canvas):

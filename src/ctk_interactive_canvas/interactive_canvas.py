@@ -8,7 +8,7 @@ Author: Tchicdje Kouojip Joram Smith (DeltaGa)
 Created: Tue Aug 6, 2024
 """
 
-from tkinter import Event
+from tkinter import Event, Canvas as TkCanvas
 from typing import Any, Callable, Dict, List, Optional
 
 import customtkinter as ctk
@@ -92,6 +92,33 @@ class InteractiveCanvas(ctk.CTkCanvas):
             "<Delete>",
             self.delete_callback if self.delete_callback is not None else self.on_delete,
         )
+
+    def coords(self, tag_or_id: Any, *args: Any) -> Any:
+        if type(tag_or_id) == str and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
+            coords_id = self.find_withtag(tag_or_id)[0]
+            TkCanvas.coords(self, coords_id, *args[:2])
+            if len(args) == 3:
+                TkCanvas.itemconfigure(
+                    self,
+                    coords_id,
+                    font=("CustomTkinter_shapes_font", -int(args[2]) * 2),
+                    text=self._get_char_from_radius(args[2]),
+                )
+        elif type(tag_or_id) == int and tag_or_id in self._aa_circle_canvas_ids:
+            TkCanvas.coords(self, tag_or_id, *args[:2])
+
+            if len(args) == 3:
+                TkCanvas.itemconfigure(
+                    self,
+                    tag_or_id,
+                    font=("CustomTkinter_shapes_font", -args[2] * 2),
+                    text=self._get_char_from_radius(args[2]),
+                )
+        else:
+            coords = TkCanvas.coords(self, tag_or_id, *args)
+            if not coords:
+                return [0, 0, 0, 0]
+            return coords
 
     def create_draggable_rectangle(
         self,

@@ -810,9 +810,9 @@ class DraggableRectangle:
         """Delete this rectangle from canvas and remove from instance tracking."""
         self.canvas.delete(self.rect)
         self.canvas.delete(self.resize_handle)
-
-        if self._self_ref in self.__class__._instances:
-            self.__class__._instances.remove(self._self_ref)
+        self.__class__._instances = [
+            ref for ref in self.__class__._instances if id(ref) != id(self._self_ref)
+        ]
 
     @classmethod
     def get_instances(cls) -> List["DraggableRectangle"]:
@@ -846,8 +846,10 @@ class DraggableRectangle:
             new_pos = [new_pos[0] + relative_pos[0], new_pos[1] + relative_pos[1]]
 
         coords_tuple = self.canvas.coords(self.rect)
-        if coords_tuple is None:
-            return
+        if coords_tuple is None or len(coords_tuple) < 4:
+            raise RuntimeError(
+                "Rectangle coordinates not found. Ensure the canvas is properly initialized."
+            )
         x0, y0, x1, y1 = coords_tuple
         dx = new_pos[0] - x0
         dy = new_pos[1] - y0
@@ -881,8 +883,10 @@ class DraggableRectangle:
             new_pos = [new_pos[0] + relative_pos[0], new_pos[1] + relative_pos[1]]
 
         coords_tuple = self.canvas.coords(self.rect)
-        if coords_tuple is None:
-            return
+        if coords_tuple is None or len(coords_tuple) < 4:
+            raise RuntimeError(
+                "Rectangle coordinates not found. Ensure the canvas is properly initialized."
+            )
         x0, y0, _, _ = coords_tuple
         self.canvas.coords(self.rect, x0, y0, new_pos[0], new_pos[1])
         self.canvas.coords(self.resize_handle, new_pos[0], new_pos[1])
@@ -905,8 +909,10 @@ class DraggableRectangle:
             new_size = [self.convert_mm_to_px(size, dpi) for size in new_size]
 
         coords_tuple = self.canvas.coords(self.rect)
-        if coords_tuple is None:
-            return
+        if coords_tuple is None or len(coords_tuple) < 4:
+            raise RuntimeError(
+                "Rectangle coordinates not found. Ensure the canvas is properly initialized."
+            )
         x0, y0, _, _ = coords_tuple
         self.canvas.coords(self.rect, x0, y0, x0 + new_size[0], y0 + new_size[1])
         self.canvas.coords(self.resize_handle, x0 + new_size[0], y0 + new_size[1])
@@ -932,8 +938,10 @@ class DraggableRectangle:
             dpi = self.dpi
 
         coords_tuple = self.canvas.coords(self.rect)
-        if coords_tuple is None:
-            return [0.0, 0.0]
+        if coords_tuple is None or len(coords_tuple) < 4:
+            raise RuntimeError(
+                "Rectangle coordinates not found. Ensure the canvas is properly initialized."
+            )
         x0, y0, _, _ = coords_tuple
 
         if relative_pos is not None:
@@ -967,8 +975,10 @@ class DraggableRectangle:
             dpi = self.dpi
 
         coords_tuple = self.canvas.coords(self.rect)
-        if coords_tuple is None:
-            return [0.0, 0.0]
+        if coords_tuple is None or len(coords_tuple) < 4:
+            raise RuntimeError(
+                "Rectangle coordinates not found. Ensure the canvas is properly initialized."
+            )
         _, _, x1, y1 = coords_tuple
 
         if relative_pos is not None:
@@ -996,8 +1006,10 @@ class DraggableRectangle:
             dpi = self.dpi
 
         coords_tuple = self.canvas.coords(self.rect)
-        if coords_tuple is None:
-            return [0.0, 0.0]
+        if coords_tuple is None or len(coords_tuple) < 4:
+            raise RuntimeError(
+                "Rectangle coordinates not found. Ensure the canvas is properly initialized."
+            )
         x0, y0, x1, y1 = coords_tuple
         width = x1 - x0
         height = y1 - y0
