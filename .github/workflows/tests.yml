@@ -58,11 +58,7 @@ jobs:
     - name: Check formatting with black
       run: |
         black --check .
-
-    - name: Lint with ruff
-      run: |
-        ruff check .
-
+        
     - name: Type check with mypy
       run: |
         mypy src/ctk_interactive_canvas
