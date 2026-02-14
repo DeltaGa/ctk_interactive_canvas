@@ -53,8 +53,8 @@ root.title("Interactive Canvas Demo")
 canvas = InteractiveCanvas(root, width=800, height=600, bg='white')
 canvas.pack()
 
-rect1 = canvas.create_draggable_rectangle(50, 50, 150, 150, outline='blue', width=2)
-rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline='red', width=2)
+rect1 = canvas.create_draggable_rectangle(50, 50, 150, 150, outline='blue', width=5)
+rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline='red', width=5)
 
 root.mainloop()
 ```
@@ -71,7 +71,7 @@ rect = canvas.create_draggable_rectangle(
     x1=100, y1=100,
     x2=200, y2=200,
     outline='blue',
-    width=2,
+    width=5,
     fill=''
 )
 ```
