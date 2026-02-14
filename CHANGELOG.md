@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-02-14
+
+Maintenance and compatibility release improving code quality, testing infrastructure, and example demonstrations.
+
+### Added
+- Explicit `width` parameter to `DraggableRectangle.__init__()` for better control over rectangle border thickness
+- Randomized coordinate generation in alignment_demo.py for dynamic visual demonstrations
+- Visual rectangle overlays for intersection (&) and union (|) operations in magic_methods_demo.py
+- Comprehensive pytest fixtures with function-level scope and proper cleanup
+- InteractiveCanvas.coords() override for handling anti-aliased circle font elements
+
+### Changed
+- Increased default rectangle border width from 2px to 5px across all examples for improved visibility
+- Refactored magic_methods_demo.py create_copy() to use canvas.copy_draggable_rectangle() method
+- Dropped Python 3.8 support; now requires Python 3.9+
+- Enhanced keyboard state management with proper type hints
+- Improved coordinate validation with explicit error raising for None checks
+- Instance tracking optimized using list comprehension in get_instances()
+
+### Fixed
+- Coordinate tuple unpacking with proper type casting to float
+- Selection state tracking in on_click() with null checks
+- Intersection and union visualization with temporary rectangle cleanup
+- Edge cases in aspect ratio maintenance during resize operations
+- Zero-height rectangle handling during resize operations
+- Weakref memory leak in instance tracking
+- GitHub Actions workflow (removed ruff check from CI)
+- Tkinter event type hints throughout codebase
+- Mutable default arguments in multiple method signatures
+
+### Technical Improvements
+- PEP 257 docstring compliance across all public methods
+- Full type hint coverage for event handlers and internal methods
+- Black code formatting applied throughout codebase
+- Virtual display support for testing environments
+- Proper fixture scope isolation for pytest reliability
+
 ## [0.3.0] - 2024-02-14
 
 ### Added
@@ -66,4 +103,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.0...v0.3.1
