@@ -22,11 +22,11 @@ def main():
     )
     canvas.pack(fill="both", expand=True)
 
-    rect1 = canvas.create_draggable_rectangle(50, 50, 150, 150, outline="blue", width=2, fill="")
+    rect1 = canvas.create_draggable_rectangle(50, 50, 150, 150, outline="blue", width=5, fill="")
 
-    rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline="red", width=2, fill="")
+    rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline="red", width=5, fill="")
 
-    rect3 = canvas.create_draggable_rectangle(400, 100, 500, 200, outline="green", width=2, fill="")
+    rect3 = canvas.create_draggable_rectangle(400, 100, 500, 200, outline="green", width=5, fill="")
 
     print("Controls:")
     print("- Click and drag rectangles to move")

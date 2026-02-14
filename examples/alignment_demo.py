@@ -9,6 +9,7 @@ Demonstrates:
 """
 
 import customtkinter as ctk
+import random
 from ctk_interactive_canvas import DraggableRectangle, InteractiveCanvas
 
 
@@ -23,7 +24,12 @@ def main():
     rectangles = []
     for i in range(5):
         rect = canvas.create_draggable_rectangle(
-            50 + i * 150, 50 + i * 30, 130 + i * 150, 130 + i * 30, outline="blue", width=2
+            random.randint(25, 70) + i * 150,
+            random.randint(25, 70) + i * 30,
+            random.randint(120, 150) + i * 150,
+            random.randint(120, 150) + i * 30,
+            outline="blue",
+            width=5,
         )
         rectangles.append(rect)
 

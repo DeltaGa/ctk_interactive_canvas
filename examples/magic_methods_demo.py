@@ -21,8 +21,8 @@ def main():
     canvas = InteractiveCanvas(root, width=900, height=600, bg="white")
     canvas.pack(pady=10)
 
-    rect1 = canvas.create_draggable_rectangle(100, 100, 200, 200, outline="blue", width=2)
-    rect2 = canvas.create_draggable_rectangle(300, 100, 400, 200, outline="red", width=2)
+    rect1 = canvas.create_draggable_rectangle(100, 100, 200, 200, outline="blue", width=5)
+    rect2 = canvas.create_draggable_rectangle(300, 100, 400, 200, outline="red", width=5)
 
     button_frame = ctk.CTkFrame(root)
     button_frame.pack(pady=10)
@@ -46,19 +46,26 @@ def main():
         info_label.configure(text="Scaled rect2 by 1/1.5 using /=")
 
     def create_copy():
-        new_rect = rect1 + [250, 0]
+        new_rect = canvas.copy_draggable_rectangle(rect1, outline="blue", width=5)
         info_label.configure(text="Created new rectangle at offset [250, 0] using +")
 
     def show_intersection():
         intersection = rect1 & rect2
         if intersection:
+            canvas.create_draggable_rectangle(
+                *intersection, max_repetitions=0, outline="green", width=5, dash=(5, 5)
+            )
+            intersection.delete()
             info_label.configure(text=f"Intersection exists! Area: {intersection._area():.0f}px²")
         else:
             info_label.configure(text="No intersection between rectangles")
 
     def show_union():
         bounding = rect1 | rect2
-        canvas.create_draggable_rectangle(*bounding, outline="purple", width=1, dash=(5, 5))
+        canvas.create_draggable_rectangle(
+            *bounding, max_repetitions=0, outline="purple", width=5, dash=(5, 5)
+        )
+        bounding.delete()
         info_label.configure(text="Created bounding box using | operator")
 
     def test_containment():

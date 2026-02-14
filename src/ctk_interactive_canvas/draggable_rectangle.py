@@ -98,6 +98,7 @@ class DraggableRectangle:
         y2: float,
         dpi: int = 300,
         radius: int = 5,
+        width: int = 5,
         **kwargs: Any,
     ) -> None:
         """
@@ -111,6 +112,7 @@ class DraggableRectangle:
             y2: Bottom-right y coordinate.
             dpi: Dots per inch for unit conversion (default: 300).
             radius: Radius of the resize handle circle (default: 5).
+            width: Width of the sides of the rectangle (default: 5).
             **kwargs: Additional arguments passed to canvas.create_rectangle.
         """
         self.canvas = canvas
@@ -118,7 +120,7 @@ class DraggableRectangle:
         self.is_selected = False
         self.original_outline = kwargs.get("outline", "black")
 
-        self.rect = canvas.create_rectangle(x1, y1, x2, y2, **kwargs)
+        self.rect = canvas.create_rectangle(x1, y1, x2, y2, width=width, **kwargs)
         self.resize_handle = canvas.create_aa_circle(x2, y2, radius=radius, fill="#00497b")
 
         if not hasattr(canvas, "_keyboard_state"):
