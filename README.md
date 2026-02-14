@@ -244,7 +244,7 @@ mypy src/ctk_interactive_canvas
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/LICENSE) file for details.
 
 ## Credits
 
