@@ -1,0 +1,191 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ctk-interactive-canvas"
+version = "0.3.0"
+description = "Interactive canvas widget for CustomTkinter with draggable, resizable rectangles"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Tchicdje Kouojip Joram Smith (DeltaGa)", email = "dev.github.tkjoramsmith@outlook.com"}
+]
+maintainers = [
+    {name = "Tchicdje Kouojip Joram Smith (DeltaGa)", email = "dev.github.tkjoramsmith@outlook.com"}
+]
+keywords = [
+    "customtkinter",
+    "tkinter",
+    "canvas",
+    "interactive",
+    "draggable",
+    "resizable",
+    "gui",
+    "widget",
+    "ui",
+    "rectangle",
+    "graphics",
+    "alignment",
+    "distribution"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: User Interfaces",
+    "Topic :: Software Development :: Widget Sets",
+    "Typing :: Typed"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "customtkinter>=5.1.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.0.0"
+]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "sphinx-autodoc-typehints>=1.24.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/DeltaGa/ctk_interactive_canvas"
+Repository = "https://github.com/DeltaGa/ctk_interactive_canvas"
+Documentation = "https://github.com/DeltaGa/ctk_interactive_canvas#readme"
+"Bug Tracker" = "https://github.com/DeltaGa/ctk_interactive_canvas/issues"
+Changelog = "https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ctk_interactive_canvas*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+ctk_interactive_canvas = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "YTT",
+    "ASYNC",
+    "BLE",
+    "B",
+    "A",
+    "C4",
+    "DTZ",
+    "T10",
+    "ISC",
+    "ICN",
+    "G",
+    "PIE",
+    "T20",
+    "PYI",
+    "PT",
+    "Q",
+    "RSE",
+    "RET",
+    "SLF",
+    "SIM",
+    "TID",
+    "TCH",
+    "ARG",
+    "PTH",
+    "ERA",
+    "PD",
+    "PGH",
+    "PL",
+    "TRY",
+    "NPY",
+    "RUF"
+]
+ignore = [
+    "E501",
+    "PLR0913",
+    "TRY003",
+    "G004"
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["PLR2004", "S101", "ARG001"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+ignore_missing_imports = true
+strict_equality = true
+strict_optional = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --cov=ctk_interactive_canvas --cov-report=term-missing"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src/ctk_interactive_canvas"]
+omit = ["tests/*", "setup.py"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
