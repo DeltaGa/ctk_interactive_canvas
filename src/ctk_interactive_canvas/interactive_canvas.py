@@ -8,6 +8,7 @@ Author: Tchicdje Kouojip Joram Smith (DeltaGa)
 Created: Tue Aug 6, 2024
 """
 
+from tkinter import Event
 from typing import Any, Callable, Dict, List, Optional
 
 import customtkinter as ctk
@@ -35,8 +36,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
         select_outline_color: str = "#16fff6",
         dpi: int = 300,
         create_bindings: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize an InteractiveCanvas.
 
@@ -88,7 +89,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.bind_all("<KeyPress-space>", self.on_space_press)
         self.bind_all("<KeyRelease-space>", self.on_space_release)
         self.bind_all(
-            "<Delete>", self.on_delete if not self.delete_callback else self.delete_callback
+            "<Delete>",
+            self.delete_callback if self.delete_callback is not None else self.on_delete,
         )
 
     def create_draggable_rectangle(
@@ -99,7 +101,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         y2: float,
         offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
-        **kwargs,
+        **kwargs: Any,
     ) -> DraggableRectangle:
         """
         Create a draggable rectangle on the canvas.
@@ -155,7 +157,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         draggable_rect: DraggableRectangle,
         offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
-        **kwargs,
+        **kwargs: Any,
     ) -> DraggableRectangle:
         """
         Create a copy of an existing draggable rectangle.
@@ -249,14 +251,14 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         return self._get_key_by_value(self.objects, draggable_rect)
 
-    def on_click(self, event) -> None:
+    def on_click(self, event: Event) -> None:
         """Handle left mouse button click."""
         if self.panning:
             self.scan_mark(event.x, event.y)
             return
 
-        shift_pressed = (event.state & 0x0001) != 0
-        ctrl_pressed = (event.state & 0x0004) != 0
+        shift_pressed = (int(event.state) & 0x0001) != 0
+        ctrl_pressed = (int(event.state) & 0x0004) != 0
         canvas_x = self.canvasx(event.x)
         canvas_y = self.canvasy(event.y)
         clicked_items = self.find_overlapping(canvas_x, canvas_y, canvas_x + 1, canvas_y + 1)
@@ -281,7 +283,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.deselect_all()
         self.dragging = True
 
-    def on_drag_select(self, event) -> None:
+    def on_drag_select(self, event: Event) -> None:
         """Handle mouse drag for selection rectangle."""
         if self.panning:
             self.scan_dragto(event.x, event.y, gain=1)
@@ -310,9 +312,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
             )
         else:
             self.coords(self.selection_rect, self.start_x, self.start_y, canvas_x, canvas_y)
-            self.update_selection_area(self.start_x, self.start_y, canvas_x, canvas_y)
+            if self.start_x is not None and self.start_y is not None:
+                self.update_selection_area(self.start_x, self.start_y, canvas_x, canvas_y)
 
-    def on_drag_release(self, event) -> None:
+    def on_drag_release(self, event: Event) -> None:
         """Handle mouse button release after dragging."""
         self.dragging = False
         if self.selection_rect:
@@ -320,26 +323,26 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.selection_rect = None
         self.start_x, self.start_y = None, None
 
-    def on_middle_click(self, event) -> None:
+    def on_middle_click(self, event: Event) -> None:
         """Handle middle mouse button press."""
         self.scan_mark(event.x, event.y)
 
-    def on_middle_drag(self, event) -> None:
+    def on_middle_drag(self, event: Event) -> None:
         """Handle middle mouse button drag."""
         self.scan_dragto(event.x, event.y, gain=1)
 
-    def on_middle_release(self, event) -> None:
+    def on_middle_release(self, event: Event) -> None:
         """Handle middle mouse button release."""
 
-    def on_space_press(self, event) -> None:
+    def on_space_press(self, event: Event) -> None:
         """Handle spacebar press to enable panning mode."""
         self.panning = True
 
-    def on_space_release(self, event) -> None:
+    def on_space_release(self, event: Event) -> None:
         """Handle spacebar release to disable panning mode."""
         self.panning = False
 
-    def on_delete(self, event) -> None:
+    def on_delete(self, event: Event) -> None:
         """
         Handle Delete key press to remove selected rectangles.
 

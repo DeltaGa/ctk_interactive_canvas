@@ -15,39 +15,41 @@ import weakref
 from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
+    from tkinter import Event
+
     from .interactive_canvas import InteractiveCanvas
 
 
 class KeyboardStateManager:
     """Manages keyboard modifier state per canvas instance."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize keyboard state tracking."""
         self.shift_held: bool = False
         self.alt_held: bool = False
         self.ctrl_held: bool = False
 
-    def on_shift_press(self, event) -> None:
+    def on_shift_press(self, event: "Event") -> None:
         """Handle Shift key press."""
         self.shift_held = True
 
-    def on_shift_release(self, event) -> None:
+    def on_shift_release(self, event: "Event") -> None:
         """Handle Shift key release."""
         self.shift_held = False
 
-    def on_alt_press(self, event) -> None:
+    def on_alt_press(self, event: "Event") -> None:
         """Handle Alt key press."""
         self.alt_held = True
 
-    def on_alt_release(self, event) -> None:
+    def on_alt_release(self, event: "Event") -> None:
         """Handle Alt key release."""
         self.alt_held = False
 
-    def on_ctrl_press(self, event) -> None:
+    def on_ctrl_press(self, event: "Event") -> None:
         """Handle Ctrl key press."""
         self.ctrl_held = True
 
-    def on_ctrl_release(self, event) -> None:
+    def on_ctrl_release(self, event: "Event") -> None:
         """Handle Ctrl key release."""
         self.ctrl_held = False
 
@@ -96,8 +98,8 @@ class DraggableRectangle:
         y2: float,
         dpi: int = 300,
         radius: int = 5,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize a draggable rectangle.
 
@@ -196,7 +198,8 @@ class DraggableRectangle:
         Returns:
             True if rectangle has positive width and height, False otherwise.
         """
-        x0, y0, x1, y1 = self.canvas.coords(self.rect)
+        coords = self.canvas.coords(self.rect)
+        x0, y0, x1, y1 = float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])
         return (x1 - x0) > 0 and (y1 - y0) > 0
 
     def __len__(self) -> int:
@@ -226,14 +229,15 @@ class DraggableRectangle:
             TypeError: If index is not int or slice.
             IndexError: If index is out of range.
         """
-        coords = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        coords: List[float] = [float(c) for c in coords_tuple]
         if isinstance(index, slice):
             return coords[index]
         if not isinstance(index, int):
             raise TypeError(f"indices must be integers or slices, not {type(index).__name__}")
         if index < -4 or index >= 4:
             raise IndexError("rectangle index out of range")
-        return coords[index]
+        return float(coords[index])
 
     def __setitem__(self, index: int, value: float) -> None:
         """
@@ -289,8 +293,9 @@ class DraggableRectangle:
             raise TypeError("point must be a sequence of two numbers [x, y]")
 
         x, y = point
-        x0, y0, x1, y1 = self.canvas.coords(self.rect)
-        return x0 <= x <= x1 and y0 <= y <= y1
+        coords = self.canvas.coords(self.rect)
+        x0, y0, x1, y1 = float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])
+        return bool(x0 <= x <= x1 and y0 <= y <= y1)
 
     def __eq__(self, other: object) -> bool:
         """
@@ -797,7 +802,8 @@ class DraggableRectangle:
         Returns:
             Area in square pixels.
         """
-        x0, y0, x1, y1 = self.canvas.coords(self.rect)
+        coords = self.canvas.coords(self.rect)
+        x0, y0, x1, y1 = float(coords[0]), float(coords[1]), float(coords[2]), float(coords[3])
         return (x1 - x0) * (y1 - y0)
 
     def delete(self) -> None:
@@ -812,7 +818,7 @@ class DraggableRectangle:
     def get_instances(cls) -> List["DraggableRectangle"]:
         """Get all currently alive DraggableRectangle instances."""
         cls._instances = [ref for ref in cls._instances if ref() is not None]
-        return [instance() for instance in cls._instances if instance() is not None]
+        return [instance for ref in cls._instances if (instance := ref()) is not None]
 
     def set_topleft_pos(
         self,
@@ -839,7 +845,10 @@ class DraggableRectangle:
         if relative_pos is not None:
             new_pos = [new_pos[0] + relative_pos[0], new_pos[1] + relative_pos[1]]
 
-        x0, y0, x1, y1 = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        if coords_tuple is None:
+            return
+        x0, y0, x1, y1 = coords_tuple
         dx = new_pos[0] - x0
         dy = new_pos[1] - y0
 
@@ -871,7 +880,10 @@ class DraggableRectangle:
         if relative_pos is not None:
             new_pos = [new_pos[0] + relative_pos[0], new_pos[1] + relative_pos[1]]
 
-        x0, y0, _, _ = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        if coords_tuple is None:
+            return
+        x0, y0, _, _ = coords_tuple
         self.canvas.coords(self.rect, x0, y0, new_pos[0], new_pos[1])
         self.canvas.coords(self.resize_handle, new_pos[0], new_pos[1])
 
@@ -892,7 +904,10 @@ class DraggableRectangle:
         if in_mm:
             new_size = [self.convert_mm_to_px(size, dpi) for size in new_size]
 
-        x0, y0, _, _ = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        if coords_tuple is None:
+            return
+        x0, y0, _, _ = coords_tuple
         self.canvas.coords(self.rect, x0, y0, x0 + new_size[0], y0 + new_size[1])
         self.canvas.coords(self.resize_handle, x0 + new_size[0], y0 + new_size[1])
 
@@ -916,7 +931,10 @@ class DraggableRectangle:
         if dpi is None:
             dpi = self.dpi
 
-        x0, y0, _, _ = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        if coords_tuple is None:
+            return [0.0, 0.0]
+        x0, y0, _, _ = coords_tuple
 
         if relative_pos is not None:
             x0 -= relative_pos[0]
@@ -948,7 +966,10 @@ class DraggableRectangle:
         if dpi is None:
             dpi = self.dpi
 
-        _, _, x1, y1 = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        if coords_tuple is None:
+            return [0.0, 0.0]
+        _, _, x1, y1 = coords_tuple
 
         if relative_pos is not None:
             x1 -= relative_pos[0]
@@ -974,7 +995,10 @@ class DraggableRectangle:
         if dpi is None:
             dpi = self.dpi
 
-        x0, y0, x1, y1 = self.canvas.coords(self.rect)
+        coords_tuple = self.canvas.coords(self.rect)
+        if coords_tuple is None:
+            return [0.0, 0.0]
+        x0, y0, x1, y1 = coords_tuple
         width = x1 - x0
         height = y1 - y0
 
@@ -1137,7 +1161,7 @@ class DraggableRectangle:
                 rect.set_topleft_pos([current_x, y], relative_pos=canvas_origin)
                 y += rect.get_size()[1] + space_between
 
-    def copy_(self, offset: Optional[List[float]] = None, **kwargs) -> "DraggableRectangle":
+    def copy_(self, offset: Optional[List[float]] = None, **kwargs: Any) -> "DraggableRectangle":
         """
         Create a copy of this rectangle at an offset position.
 
@@ -1190,20 +1214,20 @@ class DraggableRectangle:
         """Set the selection state of this rectangle."""
         self.is_selected = is_selected
 
-    def on_click(self, event) -> None:
+    def on_click(self, event: "Event") -> None:
         """Handle mouse click on the rectangle body."""
         self.start_x = event.x
         self.start_y = event.y
 
-    def on_drag(self, event) -> None:
+    def on_drag(self, event: "Event") -> None:
         """
         Handle dragging the rectangle.
 
         Modifier keys:
             Shift: Lock movement to 45-degree angles (0°, 45°, 90°, 135°, etc.)
         """
-        dx = event.x - self.start_x
-        dy = event.y - self.start_y
+        dx: float = event.x - self.start_x
+        dy: float = event.y - self.start_y
 
         if self.keyboard_state.shift_held:
             if dx == 0 and dy == 0:
@@ -1226,12 +1250,12 @@ class DraggableRectangle:
         self.start_x = event.x
         self.start_y = event.y
 
-    def on_resize_click(self, event) -> None:
+    def on_resize_click(self, event: "Event") -> None:
         """Handle mouse click on the resize handle."""
         self.resize_start_x = event.x
         self.resize_start_y = event.y
 
-    def on_resize_drag(self, event) -> None:
+    def on_resize_drag(self, event: "Event") -> None:
         """
         Handle dragging the resize handle.
 

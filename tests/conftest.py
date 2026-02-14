@@ -22,6 +22,8 @@ def app():
 def canvas(app):
     """Create an InteractiveCanvas for testing."""
     canvas = InteractiveCanvas(app, width=600, height=400, bg="white")
+    canvas.pack(fill="both", expand=True)
+    app.update()
     return canvas
 
 
