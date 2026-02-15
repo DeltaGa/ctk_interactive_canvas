@@ -1263,6 +1263,8 @@ class DraggableRectangle:
         for obj in self.canvas.get_selected():
             obj.canvas.move(obj.rect, dx, dy)
             obj.canvas.move(obj.resize_handle, dx, dy)
+            if hasattr(obj.canvas, "move_attached_items"):
+                obj.canvas.move_attached_items(obj, dx, dy)
 
         self.start_x = event.x
         self.start_y = event.y

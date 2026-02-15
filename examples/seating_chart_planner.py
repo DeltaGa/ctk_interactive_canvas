@@ -160,6 +160,14 @@ class SeatingChartPlanner:
 
         ctk.CTkButton(
             export_frame,
+            text="Load Layout",
+            command=self._load_layout,
+            height=40,
+            fg_color="#1565C0",
+        ).pack(pady=2, fill="x")
+
+        ctk.CTkButton(
+            export_frame,
             text="Save Layout",
             command=self._save_layout,
             height=40,
@@ -227,22 +235,19 @@ class SeatingChartPlanner:
         table_info = TABLE_TYPES[table_type]
         category = self.category_var.get()
 
-        rx1, ry1, rx2, ry2 = self.room_coords
-        center_x = (rx1 + rx2) / 2
-        center_y = (ry1 + ry2) / 2
-
         width_px = table_info["width"]
         height_px = table_info["height"]
 
         rect = self.canvas.create_draggable_rectangle(
-            center_x - width_px / 2,
-            center_y - height_px / 2,
-            center_x + width_px / 2,
-            center_y + height_px / 2,
+            0,
+            0,
+            width_px,
+            height_px,
             outline=TABLE_COLORS[category],
             width=3,
             fill=TABLE_COLORS[category] + "40",
             dpi=96,
+            center_on_canvas=True,
         )
 
         table = Table(table_type=table_type, category=category, table_number=self.table_counter)
@@ -260,7 +265,7 @@ class SeatingChartPlanner:
         center_x = (x1 + x2) / 2
         center_y = (y1 + y2) / 2
 
-        self.canvas.create_text(
+        text_id1 = self.canvas.create_text(
             center_x,
             center_y - 10,
             text=f"Table {table.table_number}",
@@ -269,7 +274,7 @@ class SeatingChartPlanner:
             tags=f"label_{id(rect)}",
         )
 
-        self.canvas.create_text(
+        text_id2 = self.canvas.create_text(
             center_x,
             center_y + 10,
             text=f"{table.max_seats} seats",
@@ -277,6 +282,9 @@ class SeatingChartPlanner:
             font=("Arial", 9),
             tags=f"label_{id(rect)}",
         )
+
+        self.canvas.attach_text_to_rectangle(text_id1, rect)
+        self.canvas.attach_text_to_rectangle(text_id2, rect)
 
     def _align_selected(self, mode: str):
         """Align selected tables."""
@@ -293,6 +301,74 @@ class SeatingChartPlanner:
             return
 
         DraggableRectangle.distribute(selected, mode=mode)
+
+    def _load_layout(self):
+        """Load seating arrangement from JSON."""
+        from tkinter import filedialog
+
+        file_path = filedialog.askopenfilename(
+            title="Load Layout",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            initialdir=str(Path.home()),
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "r") as f:
+                layout_data = json.load(f)
+
+            for item_id in list(self.tables.keys()):
+                rect, _ = self.tables[item_id]
+                self.canvas.delete_draggable_rectangle(item_id)
+
+            self.tables.clear()
+            self.table_counter = 0
+
+            rx1, ry1, rx2, ry2 = self.room_coords
+
+            for table_data in layout_data["tables"]:
+                self.table_counter = max(self.table_counter, table_data["number"])
+
+                pos_x_m, pos_y_m = table_data["position_m"]
+                pos_x_px = pos_x_m * PIXELS_PER_METER + rx1
+                pos_y_px = pos_y_m * PIXELS_PER_METER + ry1
+
+                table_type = table_data["type"]
+                table_info = TABLE_TYPES[table_type]
+                category = table_data["category"]
+
+                width_px = table_info["width"]
+                height_px = table_info["height"]
+
+                rect = self.canvas.create_draggable_rectangle(
+                    pos_x_px - width_px / 2,
+                    pos_y_px - height_px / 2,
+                    pos_x_px + width_px / 2,
+                    pos_y_px + height_px / 2,
+                    outline=TABLE_COLORS.get(category, "#DDA0DD"),
+                    width=3,
+                    fill=TABLE_COLORS.get(category, "#DDA0DD") + "40",
+                    dpi=96,
+                )
+
+                table = Table(
+                    table_type=table_type,
+                    category=category,
+                    table_number=table_data["number"],
+                    guests=table_data.get("guests", []),
+                )
+
+                item_id = self.canvas.get_item_id(rect)
+                self.tables[item_id] = (rect, table)
+                self._render_table_label(rect, table)
+
+            print(f"Layout loaded from: {file_path}")
+            print(f"Loaded {len(self.tables)} tables")
+
+        except Exception as e:
+            print(f"Error loading layout: {e}")
 
     def _save_layout(self):
         """Save seating arrangement to JSON."""

@@ -154,6 +154,14 @@ class BoundingBoxEditor:
         ).pack(pady=2, fill="x")
 
         ctk.CTkButton(
+            export_frame,
+            text="Load Project",
+            command=self._load_project,
+            height=35,
+            fg_color="#9C27B0",
+        ).pack(pady=2, fill="x")
+
+        ctk.CTkButton(
             export_frame, text="Save Project", command=self._save_project, height=35
         ).pack(pady=2, fill="x")
 
@@ -262,20 +270,18 @@ class BoundingBoxEditor:
             print("Please load an image first")
             return
 
-        canvas_center_x = self.canvas.winfo_width() / 2
-        canvas_center_y = self.canvas.winfo_height() / 2
-
         box_size = 100
 
         rect = self.canvas.create_draggable_rectangle(
-            canvas_center_x - box_size / 2,
-            canvas_center_y - box_size / 2,
-            canvas_center_x + box_size / 2,
-            canvas_center_y + box_size / 2,
+            0,
+            0,
+            box_size,
+            box_size,
             outline=CLASS_COLORS[self.current_class],
             width=3,
             fill="",
             dpi=96,
+            center_on_canvas=True,
         )
 
         bbox = BoundingBox(class_name=self.current_class)
@@ -290,7 +296,7 @@ class BoundingBoxEditor:
         coords = self.canvas.coords(rect.rect)
         x1, y1, _, _ = coords
 
-        self.canvas.create_text(
+        text_id = self.canvas.create_text(
             x1,
             y1 - 10,
             text=bbox.class_name,
@@ -299,6 +305,8 @@ class BoundingBoxEditor:
             anchor="sw",
             tags=f"label_{id(rect)}",
         )
+
+        self.canvas.attach_text_to_rectangle(text_id, rect)
 
     def _update_stats(self):
         """Update statistics display."""
@@ -409,6 +417,111 @@ class BoundingBoxEditor:
             json.dump(coco_format, f, indent=2)
 
         print(f"COCO format exported to: {output_path}")
+
+    def _load_project(self):
+        """Load project with all annotations."""
+        from tkinter import filedialog
+
+        file_path = filedialog.askopenfilename(
+            title="Load Project",
+            filetypes=[("JSON files", "*_project.json"), ("All files", "*.*")],
+            initialdir=str(Path.home()),
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "r") as f:
+                project_data = json.load(f)
+
+            image_path = project_data.get("image_path")
+            if image_path and Path(image_path).exists():
+                self.image_path = image_path
+                self._load_image_from_path(image_path)
+            else:
+                print(f"Image not found: {image_path}")
+                print("Load image manually, then load project again")
+                return
+
+            for item_id in list(self.annotations.keys()):
+                rect, _ = self.annotations[item_id]
+                self.canvas.delete_draggable_rectangle(item_id)
+
+            self.annotations.clear()
+
+            for ann_data in project_data["annotations"]:
+                x1, y1, x2, y2 = ann_data["bbox_canvas"]
+                class_name = ann_data["class"]
+
+                rect = self.canvas.create_draggable_rectangle(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    outline=CLASS_COLORS.get(class_name, "#FFFFFF"),
+                    width=3,
+                    fill="",
+                    dpi=96,
+                )
+
+                bbox = BoundingBox(
+                    class_name=class_name, confidence=ann_data.get("confidence", 1.0)
+                )
+
+                item_id = self.canvas.get_item_id(rect)
+                self.annotations[item_id] = (rect, bbox)
+                self._render_label(rect, bbox)
+
+            self._update_stats()
+            print(f"Project loaded from: {file_path}")
+            print(f"Loaded {len(self.annotations)} annotations")
+
+        except Exception as e:
+            print(f"Error loading project: {e}")
+
+    def _load_image_from_path(self, file_path):
+        """Load image from specified path."""
+        if not PIL_AVAILABLE:
+            return
+
+        try:
+            image = Image.open(file_path)
+            self.image_width, self.image_height = image.size
+
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
+
+            scale_w = (canvas_width - 100) / self.image_width
+            scale_h = (canvas_height - 100) / self.image_height
+            scale = min(scale_w, scale_h, 1.0)
+
+            new_width = int(self.image_width * scale)
+            new_height = int(self.image_height * scale)
+
+            resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            self.photo_image = ImageTk.PhotoImage(resized_image)
+
+            self.canvas.delete("instructions")
+
+            if self.bg_image_id:
+                self.canvas.delete(self.bg_image_id)
+
+            x_center = canvas_width / 2
+            y_center = canvas_height / 2
+
+            self.bg_image_id = self.canvas.create_image(
+                x_center, y_center, image=self.photo_image, tags="background"
+            )
+
+            self.canvas.tag_lower("background")
+
+            self.image_offset_x = x_center - new_width / 2
+            self.image_offset_y = y_center - new_height / 2
+            self.image_scale = scale
+
+        except Exception as e:
+            print(f"Error loading image: {e}")
 
     def _save_project(self):
         """Save project with all annotations."""

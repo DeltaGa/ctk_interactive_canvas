@@ -36,6 +36,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
         select_outline_color: str = "#16fff6",
         dpi: int = 300,
         create_bindings: bool = True,
+        enable_history: bool = True,
+        enable_zoom: bool = True,
         **kwargs: Any,
     ) -> None:
         """
@@ -49,11 +51,12 @@ class InteractiveCanvas(ctk.CTkCanvas):
             select_outline_color: Color for selected object outlines
             dpi: Dots per inch for coordinate conversions
             create_bindings: Whether to create default mouse/keyboard bindings
+            enable_history: Enable undo/redo functionality (default: True)
+            enable_zoom: Enable zoom functionality (default: True)
             **kwargs: Additional arguments passed to CTkCanvas
         """
         super().__init__(master, **kwargs)
 
-        # Callbacks - use lambda:None as safe default instead of mutable default
         self.select_callback = select_callback if select_callback is not None else lambda: None
         self.deselect_callback = (
             deselect_callback if deselect_callback is not None else lambda: None
@@ -65,15 +68,26 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.objects: Dict[int, DraggableRectangle] = {}
         self.dpi = dpi
 
-        # Selection state
         self.start_x: Optional[float] = None
         self.start_y: Optional[float] = None
         self.selection_rect: Optional[int] = None
         self.dragging: bool = False
         self.panning: bool = False
 
-        # ID management
         self.next_item_id: int = 0
+
+        self.enable_history = enable_history
+        self.enable_zoom = enable_zoom
+
+        if self.enable_history:
+            self.history_states: List[Dict] = []
+            self.history_index: int = -1
+            self.max_history: int = 50
+
+        if self.enable_zoom:
+            self.zoom_level: float = 1.0
+            self.min_zoom: float = 0.1
+            self.max_zoom: float = 10.0
 
         if create_bindings:
             self._create_bindings()
@@ -92,6 +106,22 @@ class InteractiveCanvas(ctk.CTkCanvas):
             "<Delete>",
             self.delete_callback if self.delete_callback is not None else self.on_delete,
         )
+
+        if self.enable_history:
+            self.bind_all("<Control-z>", lambda e: self.undo())
+            self.bind_all("<Control-Z>", lambda e: self.undo())
+            self.bind_all("<Control-y>", lambda e: self.redo())
+            self.bind_all("<Control-Y>", lambda e: self.redo())
+            self.bind_all("<Control-Shift-z>", lambda e: self.redo())
+            self.bind_all("<Control-Shift-Z>", lambda e: self.redo())
+
+        if self.enable_zoom:
+            self.bind_all("<plus>", lambda e: self.zoom_in())
+            self.bind_all("<equal>", lambda e: self.zoom_in())
+            self.bind_all("<minus>", lambda e: self.zoom_out())
+            self.bind("<Alt-MouseWheel>", self.on_zoom_wheel)
+            self.bind("<Alt-Button-4>", lambda e: self.zoom_in())
+            self.bind("<Alt-Button-5>", lambda e: self.zoom_out())
 
     def _register_rectangle(self, rect: DraggableRectangle) -> None:
         """
@@ -142,6 +172,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         y2: float,
         offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
+        center_on_canvas: bool = False,
         **kwargs: Any,
     ) -> DraggableRectangle:
         """
@@ -156,6 +187,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             y2: Bottom-right y coordinate
             offset: [dx, dy] offset for overlap avoidance (default: [21, 21])
             max_repetitions: Maximum attempts to find non-overlapping position
+            center_on_canvas: If True, center rectangle on visible canvas area (default: False)
             **kwargs: Additional arguments for DraggableRectangle
 
         Returns:
@@ -163,6 +195,23 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         if offset is None:
             offset = [21, 21]
+
+        if center_on_canvas:
+            canvas_width = self.winfo_width() if self.winfo_width() > 1 else self.winfo_reqwidth()
+            canvas_height = (
+                self.winfo_height() if self.winfo_height() > 1 else self.winfo_reqheight()
+            )
+
+            rect_width = x2 - x1
+            rect_height = y2 - y1
+
+            center_x = canvas_width / 2
+            center_y = canvas_height / 2
+
+            x1 = center_x - rect_width / 2
+            y1 = center_y - rect_height / 2
+            x2 = center_x + rect_width / 2
+            y2 = center_y + rect_height / 2
 
         draggable_rect = DraggableRectangle(self, x1, y1, x2, y2, **kwargs)
         repetitions = 0
@@ -188,6 +237,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
             if not overlap:
                 break
             repetitions += 1
+
+        if self.enable_history:
+            self.save_state()
 
         return draggable_rect
 
@@ -472,3 +524,134 @@ class InteractiveCanvas(ctk.CTkCanvas):
             if val == value:
                 return key
         return None
+
+    def save_state(self) -> None:
+        """Save current canvas state to history for undo/redo."""
+        if not self.enable_history:
+            return
+
+        state = {"objects": {}, "next_item_id": self.next_item_id}
+
+        for item_id, obj in self.objects.items():
+            coords = list(obj)
+            state["objects"][item_id] = {
+                "coords": coords,
+                "dpi": obj.dpi,
+                "outline": obj.original_outline,
+            }
+
+        if self.history_index < len(self.history_states) - 1:
+            self.history_states = self.history_states[: self.history_index + 1]
+
+        self.history_states.append(state)
+
+        if len(self.history_states) > self.max_history:
+            self.history_states.pop(0)
+        else:
+            self.history_index += 1
+
+    def undo(self) -> None:
+        """Undo the last operation."""
+        if not self.enable_history:
+            return
+
+        if self.history_index > 0:
+            self.history_index -= 1
+            self._restore_state(self.history_states[self.history_index])
+
+    def redo(self) -> None:
+        """Redo the previously undone operation."""
+        if not self.enable_history:
+            return
+
+        if self.history_index < len(self.history_states) - 1:
+            self.history_index += 1
+            self._restore_state(self.history_states[self.history_index])
+
+    def _restore_state(self, state: Dict) -> None:
+        """Restore canvas to a saved state."""
+        for item_id in list(self.objects.keys()):
+            self.delete_draggable_rectangle(item_id)
+
+        self.next_item_id = state["next_item_id"]
+
+        for item_id, obj_data in state["objects"].items():
+            coords = obj_data["coords"]
+            rect = DraggableRectangle(
+                self,
+                coords[0],
+                coords[1],
+                coords[2],
+                coords[3],
+                dpi=obj_data["dpi"],
+                outline=obj_data["outline"],
+            )
+            self.objects[item_id] = rect
+
+    def zoom_in(self, factor: float = 1.2) -> None:
+        """
+        Zoom in on the canvas.
+
+        Args:
+            factor: Zoom multiplier (default: 1.2)
+        """
+        if not self.enable_zoom:
+            return
+
+        new_zoom = self.zoom_level * factor
+        if new_zoom <= self.max_zoom:
+            self.zoom_level = new_zoom
+            self.scale("all", 0, 0, factor, factor)
+
+    def zoom_out(self, factor: float = 1.2) -> None:
+        """
+        Zoom out on the canvas.
+
+        Args:
+            factor: Zoom divisor (default: 1.2)
+        """
+        if not self.enable_zoom:
+            return
+
+        new_zoom = self.zoom_level / factor
+        if new_zoom >= self.min_zoom:
+            self.zoom_level = new_zoom
+            self.scale("all", 0, 0, 1 / factor, 1 / factor)
+
+    def on_zoom_wheel(self, event: Event) -> None:
+        """Handle Alt+MouseWheel zoom."""
+        if not self.enable_zoom:
+            return
+
+        if event.delta > 0:
+            self.zoom_in(1.1)
+        else:
+            self.zoom_out(1.1)
+
+    def attach_text_to_rectangle(self, text_id: int, rect: DraggableRectangle) -> None:
+        """
+        Attach a text item to a rectangle so they move together.
+
+        Args:
+            text_id: Canvas text item ID
+            rect: DraggableRectangle to attach text to
+        """
+        if not hasattr(rect, "_attached_items"):
+            rect._attached_items = []
+        rect._attached_items.append(text_id)
+
+    def move_attached_items(self, rect: DraggableRectangle, dx: float, dy: float) -> None:
+        """
+        Move items attached to a rectangle.
+
+        Args:
+            rect: Rectangle whose attached items should move
+            dx: X displacement
+            dy: Y displacement
+        """
+        if hasattr(rect, "_attached_items"):
+            for item_id in rect._attached_items:
+                try:
+                    self.move(item_id, dx, dy)
+                except:
+                    pass

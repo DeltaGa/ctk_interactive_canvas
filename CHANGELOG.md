@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-02-15
+
+Major feature release with history, zoom, and improved user experience.
+
+### Added
+- **History System**: Optional undo/redo functionality (enabled by default)
+  - `enable_history` parameter in InteractiveCanvas
+  - Keyboard shortcuts: Ctrl+Z (undo), Ctrl+Y or Ctrl+Shift+Z (redo)
+  - Configurable history depth (default: 50 states)
+- **Zoom Functionality**: Optional zoom in/out (enabled by default)
+  - `enable_zoom` parameter in InteractiveCanvas
+  - Keyboard shortcuts: + (zoom in), - (zoom out)
+  - Alt+MouseWheel support
+  - Configurable zoom range (0.1x to 10x)
+- **Centered Rectangle Creation**: `center_on_canvas` parameter in `create_draggable_rectangle()`
+  - When True, creates rectangle at visible canvas center (default: False)
+  - Maintains specified dimensions while centering position
+  - Improves UX in real-world examples
+- **Fluid Text Attachment**: Text labels now move with rectangles
+  - `attach_text_to_rectangle()` method for linking text to rectangles
+  - `move_attached_items()` automatically called during drag operations
+  - Prevents text labels from staying fixed when rectangles move
+- **Bidirectional Persistence**: Load/import functionality in all real-world examples
+  - Document Layout Designer: Load layout from JSON
+  - Bounding Box Editor: Load project with annotations
+  - Seating Chart Planner: Load seating arrangements
+  - Matching save/load workflows for all examples
+
+### Changed
+- Real-world examples now use `center_on_canvas=True` for better initial placement
+- All example text labels properly attached to parent rectangles
+- History automatically saved after rectangle creation
+
+### Fixed
+- Text labels remaining stationary when rectangles are dragged
+- Initial rectangle placement requiring manual positioning in examples
+
 ## [0.3.2] - 2026-02-15
 
 Critical bug fix for magic methods and auto-registration system.
@@ -121,3 +158,4 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 [Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...HEAD
 [0.3.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.0...v0.3.1
 [0.3.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...v0.3.2
+[0.3.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.2...v0.3.3

@@ -153,6 +153,14 @@ class DocumentLayoutDesigner:
             fg_color="#2E7D32",
         ).pack(side="left", padx=2)
 
+        ctk.CTkButton(
+            right_section,
+            text="Load Layout",
+            command=self._load_layout,
+            width=100,
+            fg_color="#1565C0",
+        ).pack(side="left", padx=2)
+
         ctk.CTkButton(right_section, text="Save Layout", command=self._save_layout, width=100).pack(
             side="left", padx=2
         )
@@ -207,22 +215,19 @@ class DocumentLayoutDesigner:
         """Add a text box to the layout."""
         self.element_counter += 1
 
-        x1, y1, x2, y2 = self.page_coords
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-
         box_width = 150
         box_height = 50
 
         rect = self.canvas.create_draggable_rectangle(
-            center_x - box_width / 2,
-            center_y - box_height / 2,
-            center_x + box_width / 2,
-            center_y + box_height / 2,
+            0,
+            0,
+            box_width,
+            box_height,
             outline="#ff1694",
             width=2,
             fill="",
             dpi=DPI,
+            center_on_canvas=True,
         )
 
         text_element = TextBox(
@@ -238,22 +243,19 @@ class DocumentLayoutDesigner:
         """Add an image placeholder to the layout."""
         self.element_counter += 1
 
-        x1, y1, x2, y2 = self.page_coords
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-
         box_width = 100
         box_height = 100
 
         rect = self.canvas.create_draggable_rectangle(
-            center_x - box_width / 2,
-            center_y - box_height / 2,
-            center_x + box_width / 2,
-            center_y + box_height / 2,
+            0,
+            0,
+            box_width,
+            box_height,
             outline="#20ff16",
             width=2,
             fill="",
             dpi=DPI,
+            center_on_canvas=True,
         )
 
         image_element = ImageBox()
@@ -271,7 +273,7 @@ class DocumentLayoutDesigner:
         center_x = (x1 + x2) / 2
         center_y = (y1 + y2) / 2
 
-        self.canvas.create_text(
+        text_id = self.canvas.create_text(
             center_x,
             center_y,
             text=text_box.text,
@@ -280,9 +282,26 @@ class DocumentLayoutDesigner:
             tags=f"preview_{id(rect)}",
         )
 
+        self.canvas.attach_text_to_rectangle(text_id, rect)
+
     def _render_image_preview(self, rect: DraggableRectangle):
         """Render image placeholder icon."""
         coords = self.canvas.coords(rect.rect)
+        x1, y1, x2, y2 = coords
+
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+
+        text_id = self.canvas.create_text(
+            center_x,
+            center_y,
+            text="[IMAGE]",
+            fill="#20ff16",
+            font=("Arial", 10, "bold"),
+            tags=f"preview_{id(rect)}",
+        )
+
+        self.canvas.attach_text_to_rectangle(text_id, rect)
         x1, y1, x2, y2 = coords
 
         center_x = (x1 + x2) / 2
@@ -304,6 +323,74 @@ class DocumentLayoutDesigner:
             return
 
         DraggableRectangle.align(selected, mode=mode)
+
+    def _load_layout(self):
+        """Load layout from JSON file."""
+        from tkinter import filedialog
+
+        file_path = filedialog.askopenfilename(
+            title="Load Layout",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            initialdir=str(Path.home()),
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "r") as f:
+                layout_data = json.load(f)
+
+            for item_id in list(self.elements.keys()):
+                rect, _, _ = self.elements[item_id]
+                self.canvas.delete_draggable_rectangle(item_id)
+
+            self.elements.clear()
+            self.element_counter = 0
+
+            px1, py1, px2, py2 = self.page_coords
+
+            for elem_info in layout_data["elements"]:
+                rel_x1, rel_y1, rel_x2, rel_y2 = elem_info["position_mm"]
+
+                x1 = px1 + (rel_x1 / self.page_width_mm) * (px2 - px1)
+                y1 = py1 + (rel_y1 / self.page_height_mm) * (py2 - py1)
+                x2 = px1 + (rel_x2 / self.page_width_mm) * (px2 - px1)
+                y2 = py1 + (rel_y2 / self.page_height_mm) * (py2 - py1)
+
+                self.element_counter += 1
+
+                if elem_info["type"] == "text":
+                    rect = self.canvas.create_draggable_rectangle(
+                        x1, y1, x2, y2, outline="#ff1694", width=2, fill="", dpi=DPI
+                    )
+
+                    text_element = TextBox(
+                        text=elem_info.get("text", f"Text Box {self.element_counter}"),
+                        font_size=elem_info.get("font_size", 12),
+                        alignment=elem_info.get("alignment", "left"),
+                    )
+
+                    item_id = self.canvas.get_item_id(rect)
+                    self.elements[item_id] = (rect, "text", text_element)
+                    self._render_text_preview(rect, text_element)
+
+                elif elem_info["type"] == "image":
+                    rect = self.canvas.create_draggable_rectangle(
+                        x1, y1, x2, y2, outline="#20ff16", width=2, fill="", dpi=DPI
+                    )
+
+                    image_element = ImageBox()
+
+                    item_id = self.canvas.get_item_id(rect)
+                    self.elements[item_id] = (rect, "image", image_element)
+                    self._render_image_preview(rect)
+
+            print(f"Layout loaded from: {file_path}")
+            print(f"Loaded {len(self.elements)} elements")
+
+        except Exception as e:
+            print(f"Error loading layout: {e}")
 
     def _save_layout(self):
         """Save layout to JSON file."""
