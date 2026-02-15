@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-02-15
+
+Critical bug fix for magic methods and auto-registration system.
+
+### Added
+- **Auto-registration system**: `InteractiveCanvas._register_rectangle()` method for automatic tracking of all DraggableRectangle instances
+- Automatic rectangle registration in `DraggableRectangle.__init__()` - ensures rectangles created via any method (magic methods, direct instantiation, or canvas methods) are properly tracked
+- Three production-ready real-world examples:
+  - `document_layout_designer.py` - Professional page layout tool with PDF export
+  - `bounding_box_editor.py` - ML annotation tool with YOLO/COCO export  
+  - `seating_chart_planner.py` - Event planning tool with table management
+
+### Fixed
+- **CRITICAL**: Automatic rectangle registration in InteractiveCanvas - rectangles created via magic methods (+, *, &, |, etc.) or direct DraggableRectangle instantiation now automatically register with canvas.objects, enabling proper interaction and selection
+
 ## [0.3.1] - 2026-02-14
 
 Maintenance and compatibility release improving code quality, testing infrastructure, and example demonstrations.
@@ -105,3 +120,4 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 
 [Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...HEAD
 [0.3.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.0...v0.3.1
+[0.3.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...v0.3.2

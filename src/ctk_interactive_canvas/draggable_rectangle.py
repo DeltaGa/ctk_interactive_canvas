@@ -142,6 +142,9 @@ class DraggableRectangle:
         self._self_ref = weakref.ref(self)
         self.__class__._instances.append(self._self_ref)
 
+        if hasattr(self.canvas, "_register_rectangle"):
+            self.canvas._register_rectangle(self)
+
     def __repr__(self) -> str:
         """
         Developer-friendly representation.

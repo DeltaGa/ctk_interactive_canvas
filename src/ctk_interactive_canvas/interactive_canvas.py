@@ -93,6 +93,20 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.delete_callback if self.delete_callback is not None else self.on_delete,
         )
 
+    def _register_rectangle(self, rect: DraggableRectangle) -> None:
+        """
+        Register a DraggableRectangle with the canvas.
+
+        Called automatically when a DraggableRectangle is instantiated.
+        Ensures all rectangles (including those created via magic methods) are tracked.
+
+        Args:
+            rect: The DraggableRectangle instance to register
+        """
+        if rect not in self.objects.values():
+            self.objects[self.next_item_id] = rect
+            self.next_item_id += 1
+
     def coords(self, tag_or_id: Any, *args: Any) -> Any:
         if type(tag_or_id) == str and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
             coords_id = self.find_withtag(tag_or_id)[0]
@@ -175,8 +189,6 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 break
             repetitions += 1
 
-        self.objects[self.next_item_id] = draggable_rect
-        self.next_item_id += 1
         return draggable_rect
 
     def copy_draggable_rectangle(
@@ -226,8 +238,6 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 break
             repetitions += 1
 
-        self.objects[self.next_item_id] = new_draggable_rect
-        self.next_item_id += 1
         return new_draggable_rect
 
     def delete_draggable_rectangle(self, item_id: int) -> None:
