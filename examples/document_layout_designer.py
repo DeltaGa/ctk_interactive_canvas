@@ -4,14 +4,16 @@ Document Layout Designer
 
 A practical document layout tool demonstrating real-world use of CTk Interactive Canvas.
 Features:
-- A4/US Letter page templates
-- Text box placement with live preview
-- Image placeholder boxes
+- A4/US Letter/A3/Tabloid page templates with accurate dimensions
+- Text box and image placeholder management
+- Origin-relative coordinate system (relative_pos pattern)
+- View-center-aware element creation (center_on_canvas)
+- Zoom with proper image rescaling (track_image)
 - Alignment and distribution tools
-- Export to PDF with actual text rendering
-- Professional print layout workflow
+- PDF export with actual text rendering (requires reportlab)
+- Save/Load layout to JSON
 
-Dependencies: customtkinter, reportlab, Pillow
+Dependencies: customtkinter, reportlab (optional), Pillow (optional)
 """
 
 import customtkinter as ctk
@@ -24,12 +26,18 @@ try:
     from reportlab.pdfgen import canvas as pdf_canvas
     from reportlab.lib.pagesizes import A4, LETTER
     from reportlab.lib.units import mm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
 
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
+
+try:
+    from PIL import Image as PILImage, ImageTk
+
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
 
 PAGE_FORMATS = {
     "A4": (210, 297),
@@ -70,11 +78,15 @@ class DocumentLayoutDesigner:
     Document layout designer with interactive canvas.
 
     Demonstrates:
-        - Page boundary visualization
-        - Text and image box management
+        - Page boundary as a coordinate origin (get_origin_pos / relative_pos)
+        - View-aware centering of new elements (center_on_canvas)
+        - Proper image zoom via track_image
         - Professional alignment tools
         - PDF export with actual content
     """
+
+    TEXT_OUTLINE = "#ff1694"
+    IMAGE_OUTLINE = "#20ff16"
 
     def __init__(self):
         self.root = ctk.CTk()
@@ -89,6 +101,8 @@ class DocumentLayoutDesigner:
 
         self._setup_ui()
         self._create_page_boundary()
+
+    # ─── UI Setup ───────────────────────────────────────────────────────
 
     def _setup_ui(self):
         """Build the user interface."""
@@ -105,68 +119,66 @@ class DocumentLayoutDesigner:
         self._create_canvas(canvas_frame)
 
     def _create_toolbar(self, parent):
-        """Create toolbar with controls."""
-        left_section = ctk.CTkFrame(parent)
-        left_section.pack(side="left", padx=5)
-
-        ctk.CTkLabel(left_section, text="Add:", font=("Arial", 12, "bold")).pack(
-            side="left", padx=5
+        """Create toolbar with element, alignment, and export controls."""
+        # ── Element creation ──
+        left = ctk.CTkFrame(parent)
+        left.pack(side="left", padx=5)
+        ctk.CTkLabel(left, text="Add:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkButton(left, text="Text Box", command=self._add_text_box, width=100).pack(
+            side="left", padx=2
         )
-
-        ctk.CTkButton(left_section, text="Text Box", command=self._add_text_box, width=100).pack(
+        ctk.CTkButton(left, text="Image Box", command=self._add_image_box, width=100).pack(
             side="left", padx=2
         )
 
-        ctk.CTkButton(left_section, text="Image Box", command=self._add_image_box, width=100).pack(
-            side="left", padx=2
-        )
+        # ── Alignment tools ──
+        mid = ctk.CTkFrame(parent)
+        mid.pack(side="left", padx=20)
+        ctk.CTkLabel(mid, text="Align:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
+        for label, mode in [
+            ("Left", "start"),
+            ("Center", "center"),
+            ("Right", "end"),
+            ("Top", "top"),
+            ("Middle", "middle"),
+            ("Bottom", "bottom"),
+        ]:
+            ctk.CTkButton(
+                mid, text=label, command=lambda m=mode: self._align_selected(m), width=70
+            ).pack(side="left", padx=2)
 
-        middle_section = ctk.CTkFrame(parent)
-        middle_section.pack(side="left", padx=20)
-
-        ctk.CTkLabel(middle_section, text="Align:", font=("Arial", 12, "bold")).pack(
-            side="left", padx=5
-        )
-
-        align_buttons = [
-            ("Left", lambda: self._align_selected("start")),
-            ("Center", lambda: self._align_selected("center")),
-            ("Right", lambda: self._align_selected("end")),
-            ("Top", lambda: self._align_selected("top")),
-            ("Middle", lambda: self._align_selected("middle")),
-            ("Bottom", lambda: self._align_selected("bottom")),
-        ]
-
-        for text, cmd in align_buttons:
-            ctk.CTkButton(middle_section, text=text, command=cmd, width=70).pack(
-                side="left", padx=2
-            )
-
-        right_section = ctk.CTkFrame(parent)
-        right_section.pack(side="right", padx=5)
-
+        # ── Distribute ──
+        dist = ctk.CTkFrame(parent)
+        dist.pack(side="left", padx=10)
+        ctk.CTkLabel(dist, text="Distribute:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
         ctk.CTkButton(
-            right_section,
-            text="Export PDF",
-            command=self._export_pdf,
-            width=100,
-            fg_color="#2E7D32",
+            dist, text="H", command=lambda: self._distribute_selected("horizontal"), width=40
+        ).pack(side="left", padx=2)
+        ctk.CTkButton(
+            dist, text="V", command=lambda: self._distribute_selected("vertical"), width=40
         ).pack(side="left", padx=2)
 
-        ctk.CTkButton(
-            right_section,
-            text="Load Layout",
-            command=self._load_layout,
-            width=100,
-            fg_color="#1565C0",
-        ).pack(side="left", padx=2)
+        # ── Zoom ──
+        zoom = ctk.CTkFrame(parent)
+        zoom.pack(side="left", padx=10)
+        ctk.CTkButton(zoom, text="+", command=self._zoom_in, width=35).pack(side="left", padx=1)
+        ctk.CTkButton(zoom, text="-", command=self._zoom_out, width=35).pack(side="left", padx=1)
 
-        ctk.CTkButton(right_section, text="Save Layout", command=self._save_layout, width=100).pack(
+        # ── Export / Save / Load ──
+        right = ctk.CTkFrame(parent)
+        right.pack(side="right", padx=5)
+        ctk.CTkButton(
+            right, text="Export PDF", command=self._export_pdf, width=100, fg_color="#2E7D32"
+        ).pack(side="left", padx=2)
+        ctk.CTkButton(
+            right, text="Load", command=self._load_layout, width=80, fg_color="#1565C0"
+        ).pack(side="left", padx=2)
+        ctk.CTkButton(right, text="Save", command=self._save_layout, width=80).pack(
             side="left", padx=2
         )
 
     def _create_canvas(self, parent):
-        """Create the interactive canvas with page boundary."""
+        """Create the interactive canvas."""
         canvas_width = int(self.page_width_mm * DPI / 25.4 * SCALE_FACTOR) + 200
         canvas_height = int(self.page_height_mm * DPI / 25.4 * SCALE_FACTOR) + 200
 
@@ -177,81 +189,92 @@ class DocumentLayoutDesigner:
             bg="#2b2b2b",
             select_outline_color="#00ff88",
             dpi=DPI,
+            enable_zoom=True,
         )
         self.canvas.pack(fill="both", expand=True)
 
+    # ─── Page Boundary (Origin Rectangle) ───────────────────────────────
+
     def _create_page_boundary(self):
-        """Draw page boundary as non-draggable rectangle."""
-        page_width_px = self.page_width_mm * DPI / 25.4 * SCALE_FACTOR
-        page_height_px = self.page_height_mm * DPI / 25.4 * SCALE_FACTOR
+        """
+        Draw the page boundary and store it as our coordinate origin.
 
-        canvas_center_x = self.canvas.winfo_reqwidth() / 2
-        canvas_center_y = self.canvas.winfo_reqheight() / 2
+        All element positions are stored relative to this rectangle's
+        top-left corner, using the get_origin_pos / relative_pos pattern
+        (mirrors format_editor._canvas_get_origin_pos).
+        """
+        page_w_px = self.page_width_mm * DPI / 25.4 * SCALE_FACTOR
+        page_h_px = self.page_height_mm * DPI / 25.4 * SCALE_FACTOR
 
-        x1 = canvas_center_x - page_width_px / 2
-        y1 = canvas_center_y - page_height_px / 2
-        x2 = canvas_center_x + page_width_px / 2
-        y2 = canvas_center_y + page_height_px / 2
+        canvas_cx = self.canvas.winfo_reqwidth() / 2
+        canvas_cy = self.canvas.winfo_reqheight() / 2
+
+        x1 = canvas_cx - page_w_px / 2
+        y1 = canvas_cy - page_h_px / 2
+        x2 = canvas_cx + page_w_px / 2
+        y2 = canvas_cy + page_h_px / 2
 
         self.page_rect_id = self.canvas.create_rectangle(
             x1, y1, x2, y2, outline="white", width=2, fill="white", tags="page_boundary"
         )
 
-        self.page_coords = (x1, y1, x2, y2)
-
-        title_text = (
-            f"{self.page_format} ({self.page_width_mm:.1f}mm × {self.page_height_mm:.1f}mm)"
-        )
+        title = f"{self.page_format} ({self.page_width_mm:.1f}mm x {self.page_height_mm:.1f}mm)"
         self.canvas.create_text(
-            canvas_center_x,
+            canvas_cx,
             y1 - 20,
-            text=title_text,
+            text=title,
             fill="white",
             font=("Arial", 12, "bold"),
             tags="page_title",
         )
 
-    def _add_text_box(self):
-        """Add a text box to the layout."""
-        self.element_counter += 1
+    def _get_page_origin(self) -> List[float]:
+        """
+        Get the page boundary's top-left position -- our coordinate origin.
 
-        box_width = 150
-        box_height = 50
+        This mirrors format_editor._canvas_get_origin_pos() and is used
+        as the relative_pos argument for DraggableRectangle position methods.
+        """
+        return self.canvas.get_origin_pos(self.page_rect_id)
+
+    # ─── Element Creation ───────────────────────────────────────────────
+
+    def _add_text_box(self):
+        """
+        Add a text box centered on the current view.
+
+        Uses center_on_canvas=True which internally calls canvasx/canvasy
+        to find the TRUE visible center, even after panning.
+        """
+        self.element_counter += 1
 
         rect = self.canvas.create_draggable_rectangle(
             0,
             0,
-            box_width,
-            box_height,
-            outline="#ff1694",
+            150,
+            50,
+            outline=self.TEXT_OUTLINE,
             width=2,
             fill="",
             dpi=DPI,
             center_on_canvas=True,
         )
 
-        text_element = TextBox(
-            text=f"Text Box {self.element_counter}", font_size=12, alignment="left"
-        )
-
+        text_element = TextBox(text=f"Text Box {self.element_counter}")
         item_id = self.canvas.get_item_id(rect)
         self.elements[item_id] = (rect, "text", text_element)
-
-        self._render_text_preview(rect, text_element)
+        self._render_label(rect, text_element.text, self.TEXT_OUTLINE)
 
     def _add_image_box(self):
-        """Add an image placeholder to the layout."""
+        """Add an image placeholder centered on the current view."""
         self.element_counter += 1
-
-        box_width = 100
-        box_height = 100
 
         rect = self.canvas.create_draggable_rectangle(
             0,
             0,
-            box_width,
-            box_height,
-            outline="#20ff16",
+            100,
+            100,
+            outline=self.IMAGE_OUTLINE,
             width=2,
             fill="",
             dpi=DPI,
@@ -259,228 +282,217 @@ class DocumentLayoutDesigner:
         )
 
         image_element = ImageBox()
-
         item_id = self.canvas.get_item_id(rect)
         self.elements[item_id] = (rect, "image", image_element)
+        self._render_label(rect, "[IMAGE]", self.IMAGE_OUTLINE, bold=True)
 
-        self._render_image_preview(rect)
-
-    def _render_text_preview(self, rect: DraggableRectangle, text_box: TextBox):
-        """Render text preview inside rectangle."""
-        coords = self.canvas.coords(rect.rect)
-        x1, y1, x2, y2 = coords
-
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-
+    def _render_label(self, rect: DraggableRectangle, text: str, color: str, bold: bool = False):
+        """Attach a centered text label to a rectangle so it moves with it."""
+        x0, y0, x1, y1 = self.canvas.coords(rect.rect)
+        font = ("Arial", 10, "bold") if bold else ("Arial", 10)
         text_id = self.canvas.create_text(
-            center_x,
-            center_y,
-            text=text_box.text,
-            fill="#ff1694",
-            font=("Arial", 10),
+            (x0 + x1) / 2,
+            (y0 + y1) / 2,
+            text=text,
+            fill=color,
+            font=font,
             tags=f"preview_{id(rect)}",
         )
-
         self.canvas.attach_text_to_rectangle(text_id, rect)
 
-    def _render_image_preview(self, rect: DraggableRectangle):
-        """Render image placeholder icon."""
-        coords = self.canvas.coords(rect.rect)
-        x1, y1, x2, y2 = coords
-
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-
-        text_id = self.canvas.create_text(
-            center_x,
-            center_y,
-            text="[IMAGE]",
-            fill="#20ff16",
-            font=("Arial", 10, "bold"),
-            tags=f"preview_{id(rect)}",
-        )
-
-        self.canvas.attach_text_to_rectangle(text_id, rect)
-        x1, y1, x2, y2 = coords
-
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-
-        self.canvas.create_text(
-            center_x,
-            center_y,
-            text="[IMAGE]",
-            fill="#20ff16",
-            font=("Arial", 10, "bold"),
-            tags=f"preview_{id(rect)}",
-        )
+    # ─── Alignment / Distribution (using relative_pos) ──────────────────
 
     def _align_selected(self, mode: str):
-        """Align selected elements."""
+        """
+        Align selected elements using the page origin as relative_pos.
+
+        By passing the page origin, alignment operates in page-relative
+        coordinate space -- consistent regardless of canvas pan/zoom.
+        """
         selected = self.canvas.get_selected()
         if len(selected) < 2:
             return
+        origin = self._get_page_origin()
+        DraggableRectangle.align(selected, mode=mode, relative_pos=origin)
+        self.canvas.save_state()
 
-        DraggableRectangle.align(selected, mode=mode)
+    def _distribute_selected(self, mode: str):
+        """Distribute selected elements evenly relative to the page origin."""
+        selected = self.canvas.get_selected()
+        if len(selected) < 3:
+            return
+        origin = self._get_page_origin()
+        DraggableRectangle.distribute(selected, mode=mode, relative_pos=origin)
+        self.canvas.save_state()
+
+    # ─── Zoom ───────────────────────────────────────────────────────────
+
+    def _zoom_in(self):
+        """Zoom in centered on the current view. Images auto-rescale."""
+        self.canvas.zoom_in(1.25)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _zoom_out(self):
+        """Zoom out centered on the current view. Images auto-rescale."""
+        self.canvas.zoom_out(1.25)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    # ─── Coordinate Conversion (canvas <-> page-relative mm) ───────────
+
+    def _canvas_to_page_mm(self, coords: List[float]) -> List[float]:
+        """
+        Convert canvas pixel coordinates to page-relative millimeters.
+
+        Subtracts the page origin, then converts px -> mm using DPI and scale.
+        """
+        origin = self._get_page_origin()
+        px_per_mm = DPI / 25.4 * SCALE_FACTOR
+        return [
+            (coords[0] - origin[0]) / px_per_mm,
+            (coords[1] - origin[1]) / px_per_mm,
+            (coords[2] - origin[0]) / px_per_mm,
+            (coords[3] - origin[1]) / px_per_mm,
+        ]
+
+    def _page_mm_to_canvas(self, mm_coords: List[float]) -> List[float]:
+        """Convert page-relative mm back to canvas pixels (adds origin offset)."""
+        origin = self._get_page_origin()
+        px_per_mm = DPI / 25.4 * SCALE_FACTOR
+        return [
+            mm_coords[0] * px_per_mm + origin[0],
+            mm_coords[1] * px_per_mm + origin[1],
+            mm_coords[2] * px_per_mm + origin[0],
+            mm_coords[3] * px_per_mm + origin[1],
+        ]
+
+    # ─── Save / Load ────────────────────────────────────────────────────
+
+    def _save_layout(self):
+        """Save layout to JSON with page-relative mm coordinates."""
+        layout = {"page_format": self.page_format, "elements": []}
+
+        for item_id, (rect, elem_type, elem_data) in self.elements.items():
+            canvas_coords = list(self.canvas.coords(rect.rect))
+            mm_coords = self._canvas_to_page_mm(canvas_coords)
+
+            entry = {"type": elem_type, "position_mm": [round(v, 2) for v in mm_coords]}
+            if elem_type == "text":
+                entry["text"] = elem_data.text
+                entry["font_size"] = elem_data.font_size
+                entry["alignment"] = elem_data.alignment
+            layout["elements"].append(entry)
+
+        out = Path.home() / "document_layout.json"
+        with open(out, "w") as f:
+            json.dump(layout, f, indent=2)
+        print(f"Layout saved to: {out}")
 
     def _load_layout(self):
-        """Load layout from JSON file."""
+        """Load layout from JSON, restoring elements at their page-relative positions."""
         from tkinter import filedialog
 
-        file_path = filedialog.askopenfilename(
+        path = filedialog.askopenfilename(
             title="Load Layout",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             initialdir=str(Path.home()),
         )
-
-        if not file_path:
+        if not path:
             return
 
         try:
-            with open(file_path, "r") as f:
-                layout_data = json.load(f)
+            with open(path, "r") as f:
+                layout = json.load(f)
 
-            for item_id in list(self.elements.keys()):
-                rect, _, _ = self.elements[item_id]
-                self.canvas.delete_draggable_rectangle(item_id)
-
+            for iid in list(self.elements.keys()):
+                self.canvas.delete_draggable_rectangle(iid)
             self.elements.clear()
             self.element_counter = 0
 
-            px1, py1, px2, py2 = self.page_coords
-
-            for elem_info in layout_data["elements"]:
-                rel_x1, rel_y1, rel_x2, rel_y2 = elem_info["position_mm"]
-
-                x1 = px1 + (rel_x1 / self.page_width_mm) * (px2 - px1)
-                y1 = py1 + (rel_y1 / self.page_height_mm) * (py2 - py1)
-                x2 = px1 + (rel_x2 / self.page_width_mm) * (px2 - px1)
-                y2 = py1 + (rel_y2 / self.page_height_mm) * (py2 - py1)
-
+            for elem in layout["elements"]:
+                canvas_coords = self._page_mm_to_canvas(elem["position_mm"])
+                x1, y1, x2, y2 = canvas_coords
                 self.element_counter += 1
 
-                if elem_info["type"] == "text":
+                if elem["type"] == "text":
+                    text_data = TextBox(
+                        text=elem.get("text", f"Text Box {self.element_counter}"),
+                        font_size=elem.get("font_size", 12),
+                        alignment=elem.get("alignment", "left"),
+                    )
                     rect = self.canvas.create_draggable_rectangle(
-                        x1, y1, x2, y2, outline="#ff1694", width=2, fill="", dpi=DPI
+                        x1, y1, x2, y2, outline=self.TEXT_OUTLINE, width=2, fill="", dpi=DPI
                     )
+                    iid = self.canvas.get_item_id(rect)
+                    self.elements[iid] = (rect, "text", text_data)
+                    self._render_label(rect, text_data.text, self.TEXT_OUTLINE)
 
-                    text_element = TextBox(
-                        text=elem_info.get("text", f"Text Box {self.element_counter}"),
-                        font_size=elem_info.get("font_size", 12),
-                        alignment=elem_info.get("alignment", "left"),
-                    )
-
-                    item_id = self.canvas.get_item_id(rect)
-                    self.elements[item_id] = (rect, "text", text_element)
-                    self._render_text_preview(rect, text_element)
-
-                elif elem_info["type"] == "image":
+                elif elem["type"] == "image":
                     rect = self.canvas.create_draggable_rectangle(
-                        x1, y1, x2, y2, outline="#20ff16", width=2, fill="", dpi=DPI
+                        x1, y1, x2, y2, outline=self.IMAGE_OUTLINE, width=2, fill="", dpi=DPI
                     )
+                    iid = self.canvas.get_item_id(rect)
+                    self.elements[iid] = (rect, "image", ImageBox())
+                    self._render_label(rect, "[IMAGE]", self.IMAGE_OUTLINE, bold=True)
 
-                    image_element = ImageBox()
-
-                    item_id = self.canvas.get_item_id(rect)
-                    self.elements[item_id] = (rect, "image", image_element)
-                    self._render_image_preview(rect)
-
-            print(f"Layout loaded from: {file_path}")
-            print(f"Loaded {len(self.elements)} elements")
+            print(f"Loaded {len(self.elements)} elements from: {path}")
 
         except Exception as e:
             print(f"Error loading layout: {e}")
 
-    def _save_layout(self):
-        """Save layout to JSON file."""
-        layout_data = {"page_format": self.page_format, "elements": []}
-
-        for item_id, (rect, elem_type, elem_data) in self.elements.items():
-            x1, y1, x2, y2 = self.canvas.coords(rect.rect)
-
-            px1, py1, px2, py2 = self.page_coords
-
-            rel_x1 = (x1 - px1) / (px2 - px1) * self.page_width_mm
-            rel_y1 = (y1 - py1) / (py2 - py1) * self.page_height_mm
-            rel_x2 = (x2 - px1) / (px2 - px1) * self.page_width_mm
-            rel_y2 = (y2 - py1) / (py2 - py1) * self.page_height_mm
-
-            element_info = {"type": elem_type, "position_mm": [rel_x1, rel_y1, rel_x2, rel_y2]}
-
-            if elem_type == "text":
-                element_info["text"] = elem_data.text
-                element_info["font_size"] = elem_data.font_size
-                element_info["alignment"] = elem_data.alignment
-
-            layout_data["elements"].append(element_info)
-
-        file_path = Path.home() / "document_layout.json"
-        with open(file_path, "w") as f:
-            json.dump(layout_data, f, indent=2)
-
-        print(f"Layout saved to: {file_path}")
+    # ─── PDF Export ─────────────────────────────────────────────────────
 
     def _export_pdf(self):
-        """Export layout to PDF with actual text rendering."""
+        """Export layout to PDF using page-relative mm coordinates."""
         if not REPORTLAB_AVAILABLE:
             print("ReportLab not installed. Install with: pip install reportlab")
             return
 
-        output_path = Path.home() / "document_layout.pdf"
-
+        out = Path.home() / "document_layout.pdf"
         page_size = A4 if self.page_format == "A4" else LETTER
-
-        pdf = pdf_canvas.Canvas(str(output_path), pagesize=page_size)
+        pdf = pdf_canvas.Canvas(str(out), pagesize=page_size)
 
         for item_id, (rect, elem_type, elem_data) in self.elements.items():
-            x1, y1, x2, y2 = self.canvas.coords(rect.rect)
-
-            px1, py1, px2, py2 = self.page_coords
-
-            rel_x1 = (x1 - px1) / (px2 - px1) * self.page_width_mm
-            rel_y1 = (y1 - py1) / (py2 - py1) * self.page_height_mm
-            rel_x2 = (x2 - px1) / (px2 - px1) * self.page_width_mm
-            rel_y2 = (y2 - py1) / (py2 - py1) * self.page_height_mm
+            canvas_coords = list(self.canvas.coords(rect.rect))
+            rel = self._canvas_to_page_mm(canvas_coords)
 
             if elem_type == "text":
                 pdf.setFont("Helvetica", elem_data.font_size)
-                pdf.drawString(rel_x1 * mm, (self.page_height_mm - rel_y1 - 5) * mm, elem_data.text)
+                pdf.drawString(rel[0] * mm, (self.page_height_mm - rel[1] - 5) * mm, elem_data.text)
             elif elem_type == "image":
                 pdf.rect(
-                    rel_x1 * mm,
-                    (self.page_height_mm - rel_y2) * mm,
-                    (rel_x2 - rel_x1) * mm,
-                    (rel_y2 - rel_y1) * mm,
+                    rel[0] * mm,
+                    (self.page_height_mm - rel[3]) * mm,
+                    (rel[2] - rel[0]) * mm,
+                    (rel[3] - rel[1]) * mm,
                     stroke=1,
                     fill=0,
                 )
 
         pdf.save()
-        print(f"PDF exported to: {output_path}")
+        print(f"PDF exported to: {out}")
+
+    # ─── Run ────────────────────────────────────────────────────────────
 
     def run(self):
         """Start the application."""
         print("Document Layout Designer")
-        print("=" * 50)
+        print("=" * 55)
         print("Controls:")
-        print("  - Add text/image boxes")
-        print("  - Drag to position")
-        print("  - Shift+Drag to constrain angles")
-        print("  - Ctrl+Resize to resize from center")
-        print("  - Select multiple and align")
-        print("  - Export to PDF with actual content")
-        print("")
+        print("  Click 'Text Box' / 'Image Box' to add elements")
+        print("  Elements appear at the center of the current view")
+        print("  Drag to position, resize via bottom-right handle")
+        print("  Shift+Click to multi-select, then use Align/Distribute")
+        print("  +/- buttons to zoom (images scale properly)")
+        print("  Middle-mouse or Space+Drag to pan")
+        print("  Coordinates are stored relative to the page boundary")
+        print()
         if not REPORTLAB_AVAILABLE:
-            print("Note: Install 'reportlab' for PDF export")
-            print("  pip install reportlab")
-        print("")
-
+            print("Note: pip install reportlab  for PDF export")
+        print()
         self.root.mainloop()
 
 
 def main():
-    """Entry point."""
     app = DocumentLayoutDesigner()
     app.run()
 

@@ -120,6 +120,11 @@ class DraggableRectangle:
         self.is_selected = False
         self.original_outline = kwargs.get("outline", "black")
 
+        # Store visual properties for proper state snapshot/restore
+        self.line_width = width
+        self.handle_radius = radius
+        self.fill_color = kwargs.get("fill", "")
+
         self.rect = canvas.create_rectangle(x1, y1, x2, y2, width=width, **kwargs)
         self.resize_handle = canvas.create_aa_circle(x2, y2, radius=radius, fill="#00497b")
 
@@ -136,8 +141,10 @@ class DraggableRectangle:
 
         self.canvas.tag_bind(self.rect, "<Button-1>", self.on_click)
         self.canvas.tag_bind(self.rect, "<B1-Motion>", self.on_drag)
+        self.canvas.tag_bind(self.rect, "<ButtonRelease-1>", self._on_drag_end)
         self.canvas.tag_bind(self.resize_handle, "<Button-1>", self.on_resize_click)
         self.canvas.tag_bind(self.resize_handle, "<B1-Motion>", self.on_resize_drag)
+        self.canvas.tag_bind(self.resize_handle, "<ButtonRelease-1>", self._on_resize_end)
 
         self._self_ref = weakref.ref(self)
         self.__class__._instances.append(self._self_ref)
@@ -1198,8 +1205,27 @@ class DraggableRectangle:
         new_x1 = x1 + offset[0]
         new_y1 = y1 + offset[1]
 
+        # Extract positional-only constructor args before they pollute **kwargs
+        copy_width = kwargs.pop("width", self.line_width)
+        copy_radius = kwargs.pop("radius", self.handle_radius)
+
+        # Carry forward visual properties unless explicitly overridden
+        copy_kwargs = {
+            "outline": self.original_outline,
+            "fill": self.fill_color,
+        }
+        copy_kwargs.update(kwargs)
+
         return DraggableRectangle(
-            self.canvas, new_x0, new_y0, new_x1, new_y1, dpi=self.dpi, **kwargs
+            self.canvas,
+            new_x0,
+            new_y0,
+            new_x1,
+            new_y1,
+            dpi=self.dpi,
+            width=copy_width,
+            radius=copy_radius,
+            **copy_kwargs,
         )
 
     @classmethod
@@ -1246,10 +1272,10 @@ class DraggableRectangle:
         dx: float = event.x - self.start_x
         dy: float = event.y - self.start_y
 
-        if self.keyboard_state.shift_held:
-            if dx == 0 and dy == 0:
-                return
+        if dx == 0 and dy == 0:
+            return
 
+        if self.keyboard_state.shift_held:
             angle = math.atan2(dy, dx)
             distance = math.sqrt(dx * dx + dy * dy)
 
@@ -1265,6 +1291,11 @@ class DraggableRectangle:
             obj.canvas.move(obj.resize_handle, dx, dy)
             if hasattr(obj.canvas, "move_attached_items"):
                 obj.canvas.move_attached_items(obj, dx, dy)
+
+        # Flag that objects have been moved so the canvas can save
+        # history state on ButtonRelease.
+        if hasattr(self.canvas, "_objects_changed"):
+            self.canvas._objects_changed = True
 
         self.start_x = event.x
         self.start_y = event.y
@@ -1286,6 +1317,11 @@ class DraggableRectangle:
         """
         dx = event.x - self.resize_start_x
         dy = event.y - self.resize_start_y
+
+        if dx == 0 and dy == 0:
+            return
+
+        resized = False
 
         for obj in self.canvas.get_selected():
             x0, y0, x1, y1 = obj.canvas.coords(obj.rect)
@@ -1325,9 +1361,33 @@ class DraggableRectangle:
             if new_x1 > new_x0 and new_y1 > new_y0:
                 obj.canvas.coords(obj.rect, new_x0, new_y0, new_x1, new_y1)
                 obj.canvas.coords(obj.resize_handle, new_x1, new_y1)
+                resized = True
+
+        if resized and hasattr(self.canvas, "_objects_changed"):
+            self.canvas._objects_changed = True
 
         self.resize_start_x = event.x
         self.resize_start_y = event.y
+
+    def _on_drag_end(self, event: "Event") -> None:
+        """
+        Handle mouse release after dragging the rectangle body.
+
+        Notifies the canvas that objects may have changed so it
+        can snapshot the state for undo/redo history.
+        """
+        if hasattr(self.canvas, "_on_objects_changed"):
+            self.canvas._on_objects_changed()
+
+    def _on_resize_end(self, event: "Event") -> None:
+        """
+        Handle mouse release after resizing via the handle.
+
+        Notifies the canvas that objects may have changed so it
+        can snapshot the state for undo/redo history.
+        """
+        if hasattr(self.canvas, "_on_objects_changed"):
+            self.canvas._on_objects_changed()
 
     def convert_mm_to_px(self, millimeters: float, dpi: Optional[int] = None) -> int:
         """

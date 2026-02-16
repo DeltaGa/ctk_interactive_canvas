@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-16
+
+Critical correctness release rebuilding the history/undo-redo subsystem, fixing the
+broken Delete key binding, repairing center_on_canvas coordinate-space drift, adding
+proper image zoom via PIL rescaling, and revamping all real-world examples to
+demonstrate origin-relative coordinate patterns.
+
+### Fixed — History & Undo/Redo (complete rebuild)
+- **No initial state**: `history_index` started at -1 with an empty list, making it
+  impossible to undo back to an empty canvas. Now seeds index 0 with an empty snapshot
+  via `_save_initial_state()`.
+- **Only creation saved state**: Moves, resizes, copies, and deletions never recorded
+  history. DraggableRectangle now sets `_objects_changed` during drag/resize and calls
+  `_on_objects_changed()` on ButtonRelease; the canvas snapshots only when actual
+  movement occurred. Copy and delete operations now save state as well.
+- **Restore triggered user callbacks**: `deselect_callback` fired during undo/redo
+  rebuild, causing UI side effects. Added `_restoring_state` flag to suppress callbacks
+  during restore.
+- **Auto-registration collided with restore**: DraggableRectangle constructor's
+  `_register_rectangle` created duplicate entries conflicting with the manual
+  `self.objects[item_id] = rect` assignment in `_restore_state`. Added
+  `_suppress_registration` flag during restore.
+- **Incomplete state snapshots**: `fill`, `width`, `radius` were never saved, so
+  restores lost visual properties. DraggableRectangle now stores `line_width`,
+  `handle_radius`, `fill_color` at construction; `save_state()` captures all of them;
+  `_restore_state()` passes them through.
+
+### Fixed — Delete Key (complete rewrite)
+- **TypeError crash on Delete**: `<Delete>` was always bound to the user's
+  `delete_callback`, but the default was `lambda: None` (truthy); tkinter passes an
+  Event to key bindings, so a zero-arg lambda raised `TypeError`. Now uses a single
+  `_on_delete_key` dispatcher that tries the user callback with/without event arg and
+  falls back to `on_delete`.
+- **Attached items leaked on delete**: Deleting a rectangle orphaned attached text
+  labels on the canvas. Added `_delete_attached_items()` cleanup.
+- **No history on delete**: `on_delete` now calls `save_state()` after removing all
+  selected items.
+
+### Fixed — center_on_canvas Coordinate-Space Drift
+- `create_draggable_rectangle` with `center_on_canvas=True` used raw widget-space
+  `canvas_width / 2` for centering. After any pan/scroll, widget space diverges from
+  canvas space. Now applies `canvasx()`/`canvasy()` to get the true visible center.
+
+### Fixed — Zoom System
+- `zoom_in()`/`zoom_out()` used hardcoded origin `(0, 0)` instead of the visible
+  viewport center. Now zoom is anchored at `get_view_center()`.
+- Tkinter's `canvas.scale("all", ...)` does NOT resize bitmap images — it only
+  repositions the anchor. Added `track_image()`/`untrack_image()` infrastructure with
+  PIL-based rescaling via `_rescale_tracked_image()` on every zoom operation.
+
+### Fixed — DraggableRectangle.copy_()
+- `copy_()` did not carry forward visual properties (`outline`, `fill`, `width`,
+  `radius`), producing plain black outlines. Now preserves all stored properties
+  unless explicitly overridden via `**kwargs`.
+- Fixed a kwargs double-consumption bug where `width`/`radius` were popped from
+  `kwargs` after it had already been merged into `copy_kwargs`, risking a duplicate
+  keyword argument crash.
+
+### Added
+- `InteractiveCanvas.get_view_center()` — returns the canvas-space center of the
+  currently visible viewport (accounts for pan/scroll).
+- `InteractiveCanvas.get_origin_pos(reference_item)` — returns the top-left position
+  of a reference canvas item, intended as the `relative_pos` argument for
+  DraggableRectangle position methods.
+- `InteractiveCanvas.track_image()` / `untrack_image()` — register/deregister canvas
+  images for automatic PIL-based rescaling during zoom.
+- `InteractiveCanvas._on_objects_changed()` — internal notification handler called by
+  DraggableRectangle on ButtonRelease to trigger history snapshots.
+- `DraggableRectangle._on_drag_end()` / `_on_resize_end()` — ButtonRelease handlers
+  that notify the canvas for history management.
+- `DraggableRectangle.line_width`, `handle_radius`, `fill_color` stored properties
+  for complete state snapshot/restore fidelity.
+
+### Changed — Examples (complete revamp)
+- **document_layout_designer.py**: Rewritten with page boundary as coordinate origin,
+  `_canvas_to_page_mm()`/`_page_mm_to_canvas()` coordinate converters, alignment and
+  distribution using `relative_pos=origin`, `center_on_canvas=True` for element
+  creation, zoom buttons, and save/load using page-relative mm coordinates. Align and
+  distribute now call `canvas.save_state()`.
+- **bounding_box_editor.py**: Rewritten with image boundary as coordinate origin,
+  `canvas.track_image()` for proper zoom, `_canvas_to_image_coords()` converter,
+  YOLO/COCO export using origin-relative coordinates, and `center_on_canvas=True`.
+- **seating_chart_planner.py**: Rewritten with room boundary as coordinate origin,
+  `_canvas_to_room_meters()`/`_room_meters_to_canvas()` converters, alignment and
+  distribution using `relative_pos=origin`, and save/load using room-relative meter
+  coordinates. Align and distribute now call `canvas.save_state()`.
+
 ## [0.3.3] - 2026-02-15
 
 Major feature release with history, zoom, and improved user experience.
@@ -155,7 +242,8 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...HEAD
-[0.3.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.0...v0.3.1
-[0.3.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...v0.3.2
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.0...v0.3.1
