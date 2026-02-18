@@ -76,54 +76,6 @@ rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline='red', wid
 root.mainloop()
 ```
 
-## Real-World Applications
-
-CTk Interactive Canvas excels in practical, real-world scenarios. See these complete, production-ready examples:
-
-### 📄 Document Layout Designer
-Professional page layout tool for print design and publishing.
-```python
-python examples/document_layout_designer.py
-```
-**Features**:
-- A4/US Letter page templates with accurate dimensions
-- Text box and image placeholder management
-- PDF export with actual text rendering (requires `reportlab`)
-- Professional alignment and distribution tools
-- Real-time visual feedback
-
-**Use Cases**: Newsletter design, poster creation, document layout, print production
-
-### 🎯 Bounding Box Editor for ML
-Computer vision annotation tool for object detection datasets.
-```python
-python examples/bounding_box_editor.py
-```
-**Features**:
-- Load images as canvas background (requires `Pillow`)
-- Multi-class object annotation with color coding
-- Export to YOLO and COCO JSON formats
-- Keyboard shortcuts for efficient workflow
-- Statistics tracking
-
-**Use Cases**: Machine learning dataset preparation, object detection training, image annotation
-
-### 🪑 Seating Chart Planner
-Event planning tool for arranging tables and guest seating.
-```python
-python examples/seating_chart_planner.py
-```
-**Features**:
-- Multiple table types (round, rectangular, long tables)
-- Category-based organization (VIP, Family, Friends)
-- Real-world distance measurement (meters)
-- Guest assignment tracking
-- Export seating arrangements and guest lists
-
-**Use Cases**: Wedding planning, conference organization, banquet setup, office layouts
-
----
-
 ## Usage Examples
 
 ### Basic Rectangle Creation
