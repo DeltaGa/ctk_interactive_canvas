@@ -14,7 +14,6 @@ Interactive canvas widget for CustomTkinter with draggable, resizable rectangles
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Real-World Applications](#real-world-applications)
 - [Usage Examples](#usage-examples)
 - [Keyboard Modifiers](#keyboard-modifiers)
 - [API Reference](#api-reference)
