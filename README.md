@@ -36,7 +36,7 @@ Interactive canvas widget for CustomTkinter with draggable, resizable rectangles
 - **Panning**: Middle-mouse or Space+drag to pan the canvas
 
 ### Professional Controls
-- **Adobe Illustrator-style Constraints**:
+- **Editor-style Constraints**:
   - **Shift during move**: Lock to 45-degree angles (0°, 45°, 90°, 135°, etc.)
   - **Shift during resize**: Maintain aspect ratio
   - **Ctrl during resize**: Resize from center
