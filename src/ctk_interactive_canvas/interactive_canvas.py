@@ -283,6 +283,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
             if overlapping_items:
                 for obj in self.objects.values():
+                    # Exclude the newly created rectangle from overlap detection
+                    if obj is draggable_rect:
+                        continue
                     if obj.rect in overlapping_items:
                         new_pos = [
                             x1 + offset[0] * (repetitions + 1),
