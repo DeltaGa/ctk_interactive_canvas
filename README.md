@@ -20,10 +20,9 @@ Interactive canvas widget for CustomTkinter with draggable, resizable rectangles
 - [Requirements](#requirements)
 - [Development](#development)
 - [License](#license)
-- [Credits](#credits)
 - [Contributing](#contributing)
 - [Changelog](#changelog)
-- [Support](#support)
+- [Credits](#credits)
 
 ## Features
 
@@ -260,7 +259,15 @@ mypy src/ctk_interactive_canvas
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/LICENSE) file for details.
+See [LICENSE](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/LICENSE) file for details.
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CONTRIBUTING.md) for guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CHANGELOG.md) for version history.
 
 ## Credits
 
@@ -271,20 +278,6 @@ MIT License - see [LICENSE](https://github.com/DeltaGa/ctk_interactive_canvas/bl
 
 ### Acknowledgments
 - [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern UI framework
-- Python Community - Continuous ecosystem evolution
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CONTRIBUTING.md) for guidelines.
-
-## Changelog
-
-See [CHANGELOG.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CHANGELOG.md) for version history.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/DeltaGa/ctk_interactive_canvas/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/DeltaGa/ctk_interactive_canvas/discussions)
 
 ---
 
