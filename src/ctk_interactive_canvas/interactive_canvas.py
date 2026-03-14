@@ -704,6 +704,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 "fill": obj.fill_color,
                 "line_width": obj.line_width,
                 "handle_radius": obj.handle_radius,
+                # Strong reference keeps the Python object alive in the history
+                # stack so that _restore_state can resurrect it in-place instead
+                # of creating a new instance (which would break caller references).
+                "rect_ref": obj,
             }
 
         # Truncate any future states if we're in the middle of the history
@@ -746,18 +750,124 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.history_index += 1
             self._restore_state(self.history_states[self.history_index])
 
+    def _update_rect_in_place(self, rect: "DraggableRectangle", data: Dict) -> None:
+        """
+        Mutate an existing DraggableRectangle to match a saved state snapshot.
+
+        Updates the underlying canvas item geometry and appearance without
+        destroying or recreating the Python object, so all external references
+        to this rectangle remain valid after an undo/redo operation.
+
+        Args:
+            rect: The live DraggableRectangle instance to update.
+            data: A single object entry from a history state dictionary.
+        """
+        coords = data["coords"]
+        outline = data.get("outline", "black")
+        fill = data.get("fill", "")
+        line_width = data.get("line_width", 5)
+        dpi = data.get("dpi", self.dpi)
+
+        # Update geometry of both canvas items
+        self.coords(rect.rect, coords[0], coords[1], coords[2], coords[3])
+        self.coords(rect.resize_handle, coords[2], coords[3])
+
+        # Update visual appearance on the canvas
+        self.itemconfig(rect.rect, outline=outline, fill=fill, width=line_width)
+
+        # Sync Python-side state attributes
+        rect.original_outline = outline
+        rect.fill_color = fill
+        rect.line_width = line_width
+        rect.dpi = dpi
+
+    def _resurrect_rect(self, rect: "DraggableRectangle", data: Dict) -> None:
+        """
+        Re-attach a previously deleted DraggableRectangle back onto the canvas.
+
+        When a rectangle is removed during undo (surplus step), its Python object
+        is kept alive inside the history snapshot via the ``rect_ref`` field.
+        On redo, rather than creating a brand-new DraggableRectangle — which
+        would silently break every caller-held reference — this method:
+
+        1. Re-creates the two canvas items (rectangle + resize handle) with fresh
+           canvas IDs stored directly on ``rect.rect`` / ``rect.resize_handle``.
+        2. Re-binds all mouse-event handlers to the new item IDs.
+        3. Syncs Python-side visual attributes from the saved snapshot.
+        4. Re-registers the object in the class-level weakref instance list
+           (which was pruned when ``delete()`` was called during undo).
+
+        The net result is a live, fully interactive rectangle that is the *same*
+        Python object as before undo, so all external references remain valid.
+
+        Args:
+            rect: The DraggableRectangle whose canvas items need to be recreated.
+            data: A single object entry from a history state dictionary.
+        """
+        coords = data["coords"]
+        outline = data.get("outline", "black")
+        fill = data.get("fill", "")
+        line_width = data.get("line_width", 5)
+        handle_radius = data.get("handle_radius", 5)
+        dpi = data.get("dpi", self.dpi)
+
+        # Re-create the two underlying canvas items (fresh IDs, same Python object)
+        rect.rect = self.create_rectangle(
+            coords[0],
+            coords[1],
+            coords[2],
+            coords[3],
+            outline=outline,
+            fill=fill,
+            width=line_width,
+        )
+        rect.resize_handle = self.create_aa_circle(
+            coords[2], coords[3], radius=handle_radius, fill="#00497b"
+        )
+
+        # Re-bind all mouse interaction events to the new canvas item IDs
+        self.tag_bind(rect.rect, "<Button-1>", rect.on_click)
+        self.tag_bind(rect.rect, "<B1-Motion>", rect.on_drag)
+        self.tag_bind(rect.rect, "<ButtonRelease-1>", rect._on_drag_end)
+        self.tag_bind(rect.resize_handle, "<Button-1>", rect.on_resize_click)
+        self.tag_bind(rect.resize_handle, "<B1-Motion>", rect.on_resize_drag)
+        self.tag_bind(rect.resize_handle, "<ButtonRelease-1>", rect._on_resize_end)
+
+        # Sync Python-side attribute state from the snapshot
+        rect.original_outline = outline
+        rect.fill_color = fill
+        rect.line_width = line_width
+        rect.handle_radius = handle_radius
+        rect.dpi = dpi
+
+        # Re-register in class-level weakref tracking (removed by delete())
+        rect_class = type(rect)
+        if not any(ref is rect._self_ref for ref in rect_class._instances):
+            rect_class._instances.append(rect._self_ref)
+
     def _restore_state(self, state: Dict) -> None:
         """
-        Restore canvas to a saved state.
+        Restore canvas to a saved state via in-place reconciliation.
 
-        This is a full canvas rebuild:
-        1. Deletes all current DraggableRectangles (suppressing user callbacks)
-        2. Recreates rectangles from the saved state (suppressing auto-registration)
-        3. Restores selection state
+        Rather than a full destroy/rebuild cycle (which invalidates all external
+        references to DraggableRectangle objects), this method reconciles the
+        live canvas against the saved state in three targeted steps:
 
-        Flags _restoring_state and _suppress_registration prevent
-        side effects during the rebuild (no deselect callbacks, no
-        ID counter conflicts from auto-registration).
+        1. Update in-place — items whose item_id exists in both the current
+           canvas and the saved state are mutated directly (geometry + visuals).
+           The Python object is not replaced, so all caller-held references
+           remain valid after undo/redo.
+
+        2. Delete surplus — items present only in the current canvas (not in
+           the saved state) are removed, suppressing user callbacks.
+
+        3. Resurrect missing — items present only in the saved state (previously
+           deleted by the user) are recreated as new DraggableRectangle instances
+           and registered under their original item_id.
+
+        Flags _restoring_state and _suppress_registration prevent side effects
+        throughout (no spurious deselect callbacks, no auto-registration
+        conflicts from newly created rectangles).
 
         Args:
             state: A history state dictionary from save_state().
@@ -766,38 +876,62 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._suppress_registration = True
 
         try:
-            # 1. Remove all current objects without triggering user callbacks
-            for item_id in list(self.objects.keys()):
+            # Normalise saved keys to int once for all three steps
+            saved: Dict[int, Dict] = {
+                (int(k) if isinstance(k, str) else k): v for k, v in state["objects"].items()
+            }
+
+            current_ids = set(self.objects.keys())
+            saved_ids = set(saved.keys())
+
+            # Step 1 — update surviving items in-place (preserves external references)
+            for item_id in current_ids & saved_ids:
+                self._update_rect_in_place(self.objects[item_id], saved[item_id])
+
+            # Step 2 — remove items that do not exist in the saved state
+            for item_id in list(current_ids - saved_ids):
                 self.delete_draggable_rectangle(item_id)
 
-            self.objects.clear()
-            self.selected_objects.clear()
+            # Step 3 — resurrect items that exist in saved state but not currently.
+            # When rect_ref is present (v0.4.2+), reuse the original Python object
+            # so every caller-held reference stays valid after undo/redo.
+            for item_id in saved_ids - current_ids:
+                obj_data = saved[item_id]
+                rect_ref = obj_data.get("rect_ref")
+                if rect_ref is not None:
+                    # Resurrect the original object — canvas items are recreated,
+                    # events are rebound, but the Python identity is preserved.
+                    self._resurrect_rect(rect_ref, obj_data)
+                    self.objects[item_id] = rect_ref
+                else:
+                    # Backward-compat fallback for states saved before v0.4.2
+                    # (no rect_ref field). Creates a new object as before.
+                    coords = obj_data["coords"]
+                    rect = DraggableRectangle(
+                        self,
+                        coords[0],
+                        coords[1],
+                        coords[2],
+                        coords[3],
+                        dpi=obj_data.get("dpi", self.dpi),
+                        outline=obj_data.get("outline", "black"),
+                        fill=obj_data.get("fill", ""),
+                        width=obj_data.get("line_width", 5),
+                        radius=obj_data.get("handle_radius", 5),
+                    )
+                    self.objects[item_id] = rect
 
-            # 2. Restore next_item_id BEFORE creating rects
+            # Restore next_item_id
             self.next_item_id = state["next_item_id"]
 
-            # 3. Recreate each rectangle with full visual properties
-            for item_id_key, obj_data in state["objects"].items():
-                item_id = int(item_id_key) if isinstance(item_id_key, str) else item_id_key
-                coords = obj_data["coords"]
+            # Reset selection state without firing callbacks, then restore from snapshot
+            self.selected_objects.clear()
+            for obj in self.objects.values():
+                if obj.get_is_selected():
+                    obj.set_is_selected(False)
+                    self.itemconfig(obj.rect, outline=obj.original_outline)
 
-                rect = DraggableRectangle(
-                    self,
-                    coords[0],
-                    coords[1],
-                    coords[2],
-                    coords[3],
-                    dpi=obj_data.get("dpi", self.dpi),
-                    outline=obj_data.get("outline", "black"),
-                    fill=obj_data.get("fill", ""),
-                    width=obj_data.get("line_width", 5),
-                    radius=obj_data.get("handle_radius", 5),
-                )
-                self.objects[item_id] = rect
-
-            # 4. Restore selection
-            saved_selected = state.get("selected", [])
-            for item_id in saved_selected:
+            for item_id in state.get("selected", []):
                 if item_id in self.objects:
                     self.select_item(item_id)
 

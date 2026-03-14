@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-03-14
+
+### Fixed
+- **Undo/redo broke all external references to DraggableRectangle objects**: When
+  `undo()` removed a rectangle from the canvas and `redo()` brought it back, the
+  previous implementation created a *brand-new* `DraggableRectangle` instance for
+  the resurrected item. Any application-held Python reference (e.g. `self.rect`)
+  silently became an orphan pointing at a deleted canvas object, making every
+  subsequent magic-method call (`rect += offset`, `rect *= scale`, etc.) either
+  silently do nothing or crash. Fixed by:
+  1. Storing a **strong `rect_ref`** to each live `DraggableRectangle` inside
+     every history snapshot, keeping the Python object alive across undo/redo.
+  2. Adding `_resurrect_rect()` — a new helper that, instead of constructing a
+     new instance, recreates only the two underlying canvas items (rectangle +
+     resize handle), rebinds all mouse-event handlers, and syncs the Python-side
+     attributes back onto the *original* object.
+  3. Updating `_restore_state()` Step 3 to call `_resurrect_rect()` when
+     `rect_ref` is present, with a backward-compatible fallback (new-instance
+     creation) for history states saved before v0.4.2.
+
 ## [0.4.1] - 2026-02-22
 
 ### Fixed
@@ -250,7 +270,8 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.2...v0.3.3

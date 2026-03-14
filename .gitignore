@@ -150,3 +150,5 @@ cython_debug/
 *.tmp
 temp/
 tmp/
+.ruff_cache/
+.claude

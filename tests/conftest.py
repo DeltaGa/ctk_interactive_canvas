@@ -2,6 +2,15 @@
 Pytest configuration and shared fixtures.
 """
 
+import sys
+from pathlib import Path
+
+# Ensure the local src/ tree is always resolved first so tests always run
+# against the live source instead of any previously installed package.
+_SRC = Path(__file__).parent.parent / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 import customtkinter as ctk
 import pytest
 from ctk_interactive_canvas import InteractiveCanvas
