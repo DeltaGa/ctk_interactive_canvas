@@ -12,6 +12,8 @@ Features:
 - Alignment and distribution tools
 - PDF export with actual text rendering (requires reportlab)
 - Save/Load layout to JSON
+- Preloaded scientific paper layout
+- Dynamic property sidebar for live text editing
 
 Dependencies: customtkinter, reportlab (optional), Pillow (optional)
 """
@@ -83,6 +85,8 @@ class DocumentLayoutDesigner:
         - Proper image zoom via track_image
         - Professional alignment tools
         - PDF export with actual content
+        - Preloaded scientific paper layout
+        - Dynamic property sidebar with live text editing
     """
 
     TEXT_OUTLINE = "#ff1694"
@@ -98,29 +102,38 @@ class DocumentLayoutDesigner:
 
         self.elements: Dict[int, Tuple[DraggableRectangle, str, object]] = {}
         self.element_counter = 0
+        self._selected_item_id: Optional[int] = None
 
         self._setup_ui()
         self._create_page_boundary()
+        self._load_default_layout()
 
-    # ─── UI Setup ───────────────────────────────────────────────────────
+    # --- UI Setup -----------------------------------------------------------
 
     def _setup_ui(self):
-        """Build the user interface."""
+        """Build the user interface with toolbar, sidebar, and canvas."""
         main_container = ctk.CTkFrame(self.root)
         main_container.pack(fill="both", expand=True, padx=10, pady=10)
 
         toolbar = ctk.CTkFrame(main_container, height=60)
         toolbar.pack(fill="x", padx=5, pady=5)
 
-        canvas_frame = ctk.CTkFrame(main_container)
-        canvas_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
         self._create_toolbar(toolbar)
+
+        # Lower area: sidebar on the left, canvas on the right
+        lower_frame = ctk.CTkFrame(main_container)
+        lower_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self._create_sidebar(lower_frame)
+
+        canvas_frame = ctk.CTkFrame(lower_frame)
+        canvas_frame.pack(side="right", fill="both", expand=True, padx=(5, 0))
+
         self._create_canvas(canvas_frame)
 
     def _create_toolbar(self, parent):
         """Create toolbar with element, alignment, and export controls."""
-        # ── Element creation ──
+        # -- Element creation --
         left = ctk.CTkFrame(parent)
         left.pack(side="left", padx=5)
         ctk.CTkLabel(left, text="Add:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
@@ -131,7 +144,7 @@ class DocumentLayoutDesigner:
             side="left", padx=2
         )
 
-        # ── Alignment tools ──
+        # -- Alignment tools --
         mid = ctk.CTkFrame(parent)
         mid.pack(side="left", padx=20)
         ctk.CTkLabel(mid, text="Align:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
@@ -147,7 +160,7 @@ class DocumentLayoutDesigner:
                 mid, text=label, command=lambda m=mode: self._align_selected(m), width=70
             ).pack(side="left", padx=2)
 
-        # ── Distribute ──
+        # -- Distribute --
         dist = ctk.CTkFrame(parent)
         dist.pack(side="left", padx=10)
         ctk.CTkLabel(dist, text="Distribute:", font=("Arial", 12, "bold")).pack(side="left", padx=5)
@@ -158,13 +171,13 @@ class DocumentLayoutDesigner:
             dist, text="V", command=lambda: self._distribute_selected("vertical"), width=40
         ).pack(side="left", padx=2)
 
-        # ── Zoom ──
+        # -- Zoom --
         zoom = ctk.CTkFrame(parent)
         zoom.pack(side="left", padx=10)
         ctk.CTkButton(zoom, text="+", command=self._zoom_in, width=35).pack(side="left", padx=1)
         ctk.CTkButton(zoom, text="-", command=self._zoom_out, width=35).pack(side="left", padx=1)
 
-        # ── Export / Save / Load ──
+        # -- Export / Save / Load --
         right = ctk.CTkFrame(parent)
         right.pack(side="right", padx=5)
         ctk.CTkButton(
@@ -176,6 +189,171 @@ class DocumentLayoutDesigner:
         ctk.CTkButton(right, text="Save", command=self._save_layout, width=80).pack(
             side="left", padx=2
         )
+
+    def _create_sidebar(self, parent):
+        """Create the left property sidebar panel."""
+        self.sidebar = ctk.CTkFrame(parent, width=280)
+        self.sidebar.pack(side="left", fill="y", padx=(0, 5))
+        self.sidebar.pack_propagate(False)
+
+        # Header
+        ctk.CTkLabel(self.sidebar, text="Properties", font=("Arial", 16, "bold")).pack(
+            padx=10, pady=(10, 5), anchor="w"
+        )
+
+        ctk.CTkFrame(self.sidebar, height=2, fg_color="gray50").pack(
+            fill="x", padx=10, pady=(0, 10)
+        )
+
+        # Content area that gets rebuilt on selection change
+        self.sidebar_content = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.sidebar_content.pack(fill="both", expand=True, padx=10, pady=5)
+
+        self._show_no_selection()
+
+    def _show_no_selection(self):
+        """Show placeholder text when nothing is selected."""
+        for widget in self.sidebar_content.winfo_children():
+            widget.destroy()
+
+        ctk.CTkLabel(
+            self.sidebar_content,
+            text="No element selected",
+            text_color="gray60",
+            font=("Arial", 12),
+        ).pack(pady=20)
+
+        ctk.CTkLabel(
+            self.sidebar_content,
+            text="Click an element on the\ncanvas to view and edit\nits properties.",
+            text_color="gray50",
+            font=("Arial", 11),
+            justify="center",
+        ).pack(pady=5)
+
+    def _show_element_properties(self, item_id: int):
+        """Populate the sidebar with properties for the selected element."""
+        if item_id not in self.elements:
+            self._show_no_selection()
+            return
+
+        for widget in self.sidebar_content.winfo_children():
+            widget.destroy()
+
+        rect, elem_type, elem_data = self.elements[item_id]
+
+        # Element type
+        type_label = "Text Box" if elem_type == "text" else "Image Box"
+        ctk.CTkLabel(
+            self.sidebar_content,
+            text=f"Type: {type_label}",
+            font=("Arial", 13, "bold"),
+        ).pack(anchor="w", pady=(5, 10))
+
+        # Position in mm
+        canvas_coords = list(self.canvas.coords(rect.rect))
+        mm_coords = self._canvas_to_page_mm(canvas_coords)
+
+        pos_frame = ctk.CTkFrame(self.sidebar_content, fg_color="transparent")
+        pos_frame.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(pos_frame, text="Position (mm):", font=("Arial", 11, "bold")).pack(anchor="w")
+        ctk.CTkLabel(
+            pos_frame,
+            text=f"  X: {mm_coords[0]:.1f}    Y: {mm_coords[1]:.1f}",
+            font=("Arial", 11),
+            text_color="gray70",
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            pos_frame,
+            text=f"  W: {mm_coords[2] - mm_coords[0]:.1f}    H: {mm_coords[3] - mm_coords[1]:.1f}",
+            font=("Arial", 11),
+            text_color="gray70",
+        ).pack(anchor="w")
+
+        # Text editing (only for text elements)
+        if elem_type == "text":
+            ctk.CTkFrame(self.sidebar_content, height=2, fg_color="gray50").pack(fill="x", pady=10)
+
+            ctk.CTkLabel(
+                self.sidebar_content, text="Text Content:", font=("Arial", 11, "bold")
+            ).pack(anchor="w", pady=(0, 5))
+
+            self._prop_textbox = ctk.CTkTextbox(
+                self.sidebar_content, height=120, font=("Arial", 11)
+            )
+            self._prop_textbox.pack(fill="x", pady=(0, 5))
+            self._prop_textbox.insert("1.0", elem_data.text)
+
+            # Bind live update on keystroke
+            self._prop_textbox.bind(
+                "<KeyRelease>",
+                lambda e, iid=item_id: self._on_text_keystroke(iid),
+            )
+
+            ctk.CTkButton(
+                self.sidebar_content,
+                text="Apply",
+                command=lambda iid=item_id: self._apply_text_from_sidebar(iid),
+                width=100,
+            ).pack(anchor="w", pady=(5, 0))
+        else:
+            ctk.CTkFrame(self.sidebar_content, height=2, fg_color="gray50").pack(fill="x", pady=10)
+            ctk.CTkLabel(
+                self.sidebar_content,
+                text="Image placeholder.\nDrag to reposition.",
+                font=("Arial", 11),
+                text_color="gray60",
+                justify="left",
+            ).pack(anchor="w", pady=5)
+
+    def _on_text_keystroke(self, item_id: int):
+        """Live-update the canvas label as the user types."""
+        if item_id not in self.elements:
+            return
+        new_text = self._prop_textbox.get("1.0", "end-1c")
+        self._update_element_text(item_id, new_text)
+
+    def _apply_text_from_sidebar(self, item_id: int):
+        """Apply text from the sidebar textbox to the element (explicit button)."""
+        if item_id not in self.elements:
+            return
+        new_text = self._prop_textbox.get("1.0", "end-1c")
+        self._update_element_text(item_id, new_text)
+
+    def _update_element_text(self, item_id: int, new_text: str):
+        """Update the text content of an element and refresh its canvas label."""
+        if item_id not in self.elements:
+            return
+        rect, elem_type, elem_data = self.elements[item_id]
+        if elem_type != "text":
+            return
+        elem_data.text = new_text
+        # Remove old attached text items
+        for aid in rect._attached_items:
+            self.canvas.delete(aid)
+        rect._attached_items.clear()
+        # Re-render label
+        self._render_label(rect, new_text, self.TEXT_OUTLINE)
+
+    def _on_canvas_select(self):
+        """Callback when elements are selected on the canvas."""
+        selected = self.canvas.get_selected()
+        if selected:
+            # Show properties for the first selected element
+            first = selected[0]
+            item_id = self.canvas.get_item_id(first)
+            if item_id is not None:
+                self._selected_item_id = item_id
+                self._show_element_properties(item_id)
+        else:
+            self._selected_item_id = None
+            self._show_no_selection()
+
+    def _on_canvas_deselect(self):
+        """Callback when elements are deselected on the canvas."""
+        self._selected_item_id = None
+        self._show_no_selection()
 
     def _create_canvas(self, parent):
         """Create the interactive canvas."""
@@ -190,10 +368,12 @@ class DocumentLayoutDesigner:
             select_outline_color="#00ff88",
             dpi=DPI,
             enable_zoom=True,
+            select_callback=self._on_canvas_select,
+            deselect_callback=self._on_canvas_deselect,
         )
         self.canvas.pack(fill="both", expand=True)
 
-    # ─── Page Boundary (Origin Rectangle) ───────────────────────────────
+    # --- Page Boundary (Origin Rectangle) -----------------------------------
 
     def _create_page_boundary(self):
         """
@@ -215,7 +395,7 @@ class DocumentLayoutDesigner:
         y2 = canvas_cy + page_h_px / 2
 
         self.page_rect_id = self.canvas.create_rectangle(
-            x1, y1, x2, y2, outline="white", width=2, fill="white", tags="page_boundary"
+            x1, y1, x2, y2, outline="white", width=5, fill="white", tags="page_boundary"
         )
 
         title = f"{self.page_format} ({self.page_width_mm:.1f}mm x {self.page_height_mm:.1f}mm)"
@@ -237,7 +417,240 @@ class DocumentLayoutDesigner:
         """
         return self.canvas.get_origin_pos(self.page_rect_id)
 
-    # ─── Element Creation ───────────────────────────────────────────────
+    # --- Default Scientific Paper Layout ------------------------------------
+
+    def _load_default_layout(self):
+        """
+        Load a preloaded scientific paper layout on an A4 page.
+
+        Positions are in mm relative to the page top-left corner.
+        Uses a two-column layout for body sections.
+        """
+        # A4 dimensions: 210 x 297 mm
+        # Margins: 15mm left/right, 15mm top/bottom
+        margin_l = 15
+        margin_r = 195  # 210 - 15
+        page_center = 105  # 210 / 2
+        col_gap = 5  # gap between columns in mm
+        col1_l = margin_l
+        col1_r = page_center - col_gap / 2  # ~102.5
+        col2_l = page_center + col_gap / 2  # ~107.5
+        col2_r = margin_r
+
+        elements_spec = []
+
+        # --- Title (top center, full width) ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 15, margin_r, 30],
+                "text": "Research Paper Title",
+                "font_size": 18,
+            }
+        )
+
+        # --- Authors ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l + 20, 32, margin_r - 20, 42],
+                "text": "Author A, Author B, Author C",
+                "font_size": 11,
+            }
+        )
+
+        # --- Abstract heading ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 48, margin_r, 56],
+                "text": "Abstract",
+                "font_size": 14,
+            }
+        )
+
+        # --- Abstract body ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 57, margin_r, 82],
+                "text": (
+                    "This paper presents a comprehensive study on the given topic. "
+                    "We describe our methodology, key findings, and conclusions drawn "
+                    "from extensive experimental analysis."
+                ),
+                "font_size": 10,
+            }
+        )
+
+        # --- Introduction heading (left column) ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [col1_l, 90, col1_r, 98],
+                "text": "1. Introduction",
+                "font_size": 13,
+            }
+        )
+
+        # --- Introduction body (left column) ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [col1_l, 99, col1_r, 145],
+                "text": (
+                    "The motivation for this work stems from recent advances in the field. "
+                    "Prior studies have shown promising results, yet significant gaps remain. "
+                    "In this section we outline the problem statement and our contributions."
+                ),
+                "font_size": 10,
+            }
+        )
+
+        # --- Methods heading (right column) ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [col2_l, 90, col2_r, 98],
+                "text": "2. Methods",
+                "font_size": 13,
+            }
+        )
+
+        # --- Methods body (right column) ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [col2_l, 99, col2_r, 145],
+                "text": (
+                    "We employed a mixed-methods approach combining quantitative analysis "
+                    "with qualitative observations. Data was collected over a six-month period "
+                    "and processed using standard statistical techniques."
+                ),
+                "font_size": 10,
+            }
+        )
+
+        # --- Figure 1 placeholder (left column) ---
+        elements_spec.append(
+            {
+                "type": "image",
+                "mm": [col1_l, 150, col1_r, 200],
+                "text": "[Figure 1]",
+            }
+        )
+
+        # --- Figure 2 placeholder (right column) ---
+        elements_spec.append(
+            {
+                "type": "image",
+                "mm": [col2_l, 150, col2_r, 200],
+                "text": "[Figure 2]",
+            }
+        )
+
+        # --- Results heading (full width) ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 207, margin_r, 215],
+                "text": "3. Results",
+                "font_size": 13,
+            }
+        )
+
+        # --- Results body ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 216, margin_r, 245],
+                "text": (
+                    "Our experiments demonstrate a statistically significant improvement "
+                    "over baseline methods. Table 1 summarizes the quantitative results "
+                    "across all evaluation metrics."
+                ),
+                "font_size": 10,
+            }
+        )
+
+        # --- Conclusion heading ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 250, margin_r, 258],
+                "text": "4. Conclusion",
+                "font_size": 13,
+            }
+        )
+
+        # --- Conclusion body ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 259, margin_r, 275],
+                "text": (
+                    "In this work we have presented a novel approach that achieves "
+                    "state-of-the-art performance. Future work will explore extensions "
+                    "to larger datasets and additional domains."
+                ),
+                "font_size": 10,
+            }
+        )
+
+        # --- References ---
+        elements_spec.append(
+            {
+                "type": "text",
+                "mm": [margin_l, 278, margin_r, 292],
+                "text": (
+                    "References\n"
+                    "[1] Smith et al., J. Research, 2024.\n"
+                    "[2] Johnson & Lee, Proc. Conf., 2023."
+                ),
+                "font_size": 9,
+            }
+        )
+
+        # Create all elements
+        for spec in elements_spec:
+            canvas_coords = self._page_mm_to_canvas(spec["mm"])
+            x1, y1, x2, y2 = canvas_coords
+            self.element_counter += 1
+
+            if spec["type"] == "text":
+                text_data = TextBox(
+                    text=spec["text"],
+                    font_size=spec.get("font_size", 12),
+                )
+                rect = self.canvas.create_draggable_rectangle(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    outline=self.TEXT_OUTLINE,
+                    width=5,
+                    fill="",
+                    dpi=DPI,
+                )
+                iid = self.canvas.get_item_id(rect)
+                self.elements[iid] = (rect, "text", text_data)
+                self._render_label(rect, text_data.text, self.TEXT_OUTLINE)
+            elif spec["type"] == "image":
+                rect = self.canvas.create_draggable_rectangle(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    outline=self.IMAGE_OUTLINE,
+                    width=5,
+                    fill="",
+                    dpi=DPI,
+                )
+                iid = self.canvas.get_item_id(rect)
+                self.elements[iid] = (rect, "image", ImageBox())
+                self._render_label(rect, spec.get("text", "[IMAGE]"), self.IMAGE_OUTLINE, bold=True)
+
+    # --- Element Creation ---------------------------------------------------
 
     def _add_text_box(self):
         """
@@ -254,7 +667,7 @@ class DocumentLayoutDesigner:
             150,
             50,
             outline=self.TEXT_OUTLINE,
-            width=2,
+            width=5,
             fill="",
             dpi=DPI,
             center_on_canvas=True,
@@ -275,7 +688,7 @@ class DocumentLayoutDesigner:
             100,
             100,
             outline=self.IMAGE_OUTLINE,
-            width=2,
+            width=5,
             fill="",
             dpi=DPI,
             center_on_canvas=True,
@@ -300,7 +713,7 @@ class DocumentLayoutDesigner:
         )
         self.canvas.attach_text_to_rectangle(text_id, rect)
 
-    # ─── Alignment / Distribution (using relative_pos) ──────────────────
+    # --- Alignment / Distribution (using relative_pos) ----------------------
 
     def _align_selected(self, mode: str):
         """
@@ -325,7 +738,7 @@ class DocumentLayoutDesigner:
         DraggableRectangle.distribute(selected, mode=mode, relative_pos=origin)
         self.canvas.save_state()
 
-    # ─── Zoom ───────────────────────────────────────────────────────────
+    # --- Zoom ---------------------------------------------------------------
 
     def _zoom_in(self):
         """Zoom in centered on the current view. Images auto-rescale."""
@@ -337,7 +750,7 @@ class DocumentLayoutDesigner:
         self.canvas.zoom_out(1.25)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    # ─── Coordinate Conversion (canvas <-> page-relative mm) ───────────
+    # --- Coordinate Conversion (canvas <-> page-relative mm) ----------------
 
     def _canvas_to_page_mm(self, coords: List[float]) -> List[float]:
         """
@@ -365,7 +778,7 @@ class DocumentLayoutDesigner:
             mm_coords[3] * px_per_mm + origin[1],
         ]
 
-    # ─── Save / Load ────────────────────────────────────────────────────
+    # --- Save / Load --------------------------------------------------------
 
     def _save_layout(self):
         """Save layout to JSON with page-relative mm coordinates."""
@@ -420,7 +833,7 @@ class DocumentLayoutDesigner:
                         alignment=elem.get("alignment", "left"),
                     )
                     rect = self.canvas.create_draggable_rectangle(
-                        x1, y1, x2, y2, outline=self.TEXT_OUTLINE, width=2, fill="", dpi=DPI
+                        x1, y1, x2, y2, outline=self.TEXT_OUTLINE, width=5, fill="", dpi=DPI
                     )
                     iid = self.canvas.get_item_id(rect)
                     self.elements[iid] = (rect, "text", text_data)
@@ -428,7 +841,7 @@ class DocumentLayoutDesigner:
 
                 elif elem["type"] == "image":
                     rect = self.canvas.create_draggable_rectangle(
-                        x1, y1, x2, y2, outline=self.IMAGE_OUTLINE, width=2, fill="", dpi=DPI
+                        x1, y1, x2, y2, outline=self.IMAGE_OUTLINE, width=5, fill="", dpi=DPI
                     )
                     iid = self.canvas.get_item_id(rect)
                     self.elements[iid] = (rect, "image", ImageBox())
@@ -439,7 +852,7 @@ class DocumentLayoutDesigner:
         except Exception as e:
             print(f"Error loading layout: {e}")
 
-    # ─── PDF Export ─────────────────────────────────────────────────────
+    # --- PDF Export ---------------------------------------------------------
 
     def _export_pdf(self):
         """Export layout to PDF using page-relative mm coordinates."""
@@ -471,7 +884,7 @@ class DocumentLayoutDesigner:
         pdf.save()
         print(f"PDF exported to: {out}")
 
-    # ─── Run ────────────────────────────────────────────────────────────
+    # --- Run ----------------------------------------------------------------
 
     def run(self):
         """Start the application."""
@@ -485,6 +898,7 @@ class DocumentLayoutDesigner:
         print("  +/- buttons to zoom (images scale properly)")
         print("  Middle-mouse or Space+Drag to pan")
         print("  Coordinates are stored relative to the page boundary")
+        print("  Select an element to edit its text in the sidebar")
         print()
         if not REPORTLAB_AVAILABLE:
             print("Note: pip install reportlab  for PDF export")

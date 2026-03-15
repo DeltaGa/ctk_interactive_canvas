@@ -28,7 +28,7 @@ def main():
             random.randint(25, 70) + i * 30,
             random.randint(120, 150) + i * 150,
             random.randint(120, 150) + i * 30,
-            outline="blue",
+            outline=f"#{random.randint(0, 0xFFFFFF):06x}",
             width=5,
         )
         rectangles.append(rect)

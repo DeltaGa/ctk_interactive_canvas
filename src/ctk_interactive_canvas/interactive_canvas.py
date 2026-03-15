@@ -764,9 +764,19 @@ class InteractiveCanvas(ctk.CTkCanvas):
         line_width = data.get("line_width", 5)
         dpi = data.get("dpi", self.dpi)
 
+        # Compute positional delta from the current top-left before moving,
+        # so attached items (text labels, etc.) can be displaced by the same amount.
+        old_coords = self.coords(rect.rect)
+        dx = coords[0] - old_coords[0]
+        dy = coords[1] - old_coords[1]
+
         # Update geometry of both canvas items
         self.coords(rect.rect, coords[0], coords[1], coords[2], coords[3])
         self.coords(rect.resize_handle, coords[2], coords[3])
+
+        # Move attached items by the same top-left delta so they track the rectangle
+        if dx or dy:
+            self.move_attached_items(rect, dx, dy)
 
         # Update visual appearance on the canvas
         self.itemconfig(rect.rect, outline=outline, fill=fill, width=line_width)

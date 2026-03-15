@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-14
+
+### Fixed
+- **Attached items not repositioned during undo/redo**: `_update_rect_in_place()`
+  moved the rectangle's canvas item to its saved coordinates but left attached
+  items (text labels, etc.) at their old position. Now computes the top-left
+  delta before updating geometry and calls `move_attached_items(rect, dx, dy)`
+  so labels track the rectangle across undo/redo operations.
+
+### Added — Examples
+- **seating_chart_planner.py — Preloaded wedding scene**: Starts with a fully
+  laid out marriage ceremony venue (25m × 20m): altar/stage at the front,
+  red-carpet center aisle, VIP head table for the wedding party, symmetrical
+  bride's/groom's side tables (Family closest to aisle, Friends farther out),
+  and General tables at the back. 17 tables total, all properly labeled.
+- **document_layout_designer.py — Preloaded scientific paper layout**: Starts
+  with a complete A4 academic paper template: title, authors, abstract,
+  two-column body (Introduction / Methods), figure placeholders, Results,
+  Conclusion, and References — all positioned in mm coordinates.
+- **document_layout_designer.py — Dynamic property sidebar**: Left sidebar
+  panel that updates on element selection. Displays element type, position in
+  mm, and — for text boxes — a live-editable text field that updates the
+  canvas label on every keystroke. Uses `select_callback` / `deselect_callback`
+  integration with the InteractiveCanvas.
+
+### Changed — Examples
+- **seating_chart_planner.py**: Room enlarged from 20m × 15m to 25m × 20m to
+  accommodate the wedding layout.
+- **document_layout_designer.py**: UI restructured from toolbar-only to
+  toolbar + left sidebar layout.
+
 ## [0.4.3] - 2026-03-14
 
 ### Fixed
@@ -284,7 +315,8 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.0...v0.4.1

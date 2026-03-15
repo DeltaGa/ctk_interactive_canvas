@@ -75,11 +75,12 @@ class SeatingChartPlanner:
 
         self.tables: Dict[int, Tuple[DraggableRectangle, Table]] = {}
         self.table_counter = 0
-        self.room_width_m = 20
-        self.room_height_m = 15
+        self.room_width_m = 25
+        self.room_height_m = 20
 
         self._setup_ui()
         self._create_room_boundary()
+        self._load_default_layout()
 
     # ─── UI Setup ───────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ class SeatingChartPlanner:
         main = ctk.CTkFrame(self.root)
         main.pack(fill="both", expand=True, padx=10, pady=10)
 
-        left = ctk.CTkFrame(main, width=280)
+        left = ctk.CTkFrame(main, width=580)
         left.pack(side="left", fill="y", padx=5, pady=5)
         left.pack_propagate(False)
 
@@ -128,7 +129,7 @@ class SeatingChartPlanner:
             ctk.CTkRadioButton(frame, text=cat, variable=self.category_var, value=cat).pack(
                 side="left", padx=5
             )
-            ctk.CTkFrame(frame, width=20, height=20, fg_color=color, corner_radius=3).pack(
+            ctk.CTkFrame(frame, width=50, height=20, fg_color=color, corner_radius=3).pack(
                 side="right", padx=5
             )
 
@@ -229,7 +230,7 @@ class SeatingChartPlanner:
         y2 = y1 + rh
 
         self.room_rect_id = self.canvas.create_rectangle(
-            x1, y1, x2, y2, outline="white", width=2, dash=(10, 5), tags="room_boundary"
+            x1, y1, x2, y2, outline="white", width=5, dash=(10, 5), tags="room_boundary"
         )
 
         title = f"Event Space ({self.room_width_m}m x {self.room_height_m}m)"
@@ -265,6 +266,148 @@ class SeatingChartPlanner:
         """
         return self.canvas.get_origin_pos(self.room_rect_id)
 
+    # ─── Default Wedding Layout ──────────────────────────────────────────
+
+    def _load_default_layout(self):
+        """
+        Preload a wedding/marriage ceremony seating layout.
+
+        Layout (25m wide x 20m tall):
+          - Altar/stage at the front (top center)
+          - Red-carpet aisle running down the center
+          - VIP/Head Table for the wedding party near the altar
+          - Bride's side tables (left): Family closest to aisle, Friends farther out
+          - Groom's side tables (right): mirror of bride's side
+          - General tables at the back
+        """
+        origin = self._get_room_origin()
+        room_cx = self.room_width_m / 2  # 12.5m center
+
+        # ── Altar / Stage (non-interactive canvas rectangle) ──
+        altar_w, altar_h = 6, 2  # meters
+        ax1 = (room_cx - altar_w / 2) * PIXELS_PER_METER + origin[0]
+        ay1 = 1.0 * PIXELS_PER_METER + origin[1]
+        ax2 = (room_cx + altar_w / 2) * PIXELS_PER_METER + origin[0]
+        ay2 = (1.0 + altar_h) * PIXELS_PER_METER + origin[1]
+        self.canvas.create_rectangle(
+            ax1,
+            ay1,
+            ax2,
+            ay2,
+            fill="#4a3728",
+            outline="#654321",
+            width=3,
+            tags="decor_altar",
+        )
+        self.canvas.create_text(
+            (ax1 + ax2) / 2,
+            (ay1 + ay2) / 2,
+            text="Altar",
+            fill="white",
+            font=("Arial", 14, "bold"),
+            tags="decor_altar",
+        )
+
+        # ── Red-Carpet Aisle (non-interactive canvas rectangle) ──
+        carpet_w = 1.2  # meters wide
+        carpet_top = 3.5  # starts just below the altar
+        carpet_bottom = 19.0  # extends almost to the back
+        cx1 = (room_cx - carpet_w / 2) * PIXELS_PER_METER + origin[0]
+        cy1 = carpet_top * PIXELS_PER_METER + origin[1]
+        cx2 = (room_cx + carpet_w / 2) * PIXELS_PER_METER + origin[0]
+        cy2 = carpet_bottom * PIXELS_PER_METER + origin[1]
+        self.canvas.create_rectangle(
+            cx1,
+            cy1,
+            cx2,
+            cy2,
+            fill="#8B0000",
+            outline="#C41E3A",
+            width=2,
+            tags="decor_carpet",
+        )
+
+        # ── Helper to place a table ──
+        def place_table(pos_m, table_type, category, number):
+            info = TABLE_TYPES[table_type]
+            size_px = (info["width"], info["height"])
+            x1, y1, x2, y2 = self._room_meters_to_canvas(pos_m, size_px)
+            rect = self.canvas.create_draggable_rectangle(
+                x1,
+                y1,
+                x2,
+                y2,
+                outline=TABLE_COLORS[category],
+                width=3,
+                fill=TABLE_COLORS[category],
+                dpi=96,
+            )
+            table = Table(
+                table_type=table_type,
+                category=category,
+                table_number=number,
+            )
+            item_id = self.canvas.get_item_id(rect)
+            self.tables[item_id] = (rect, table)
+            self._render_table_label(rect, table)
+
+        # ── VIP / Head Table (Long Table near the altar) ──
+        self.table_counter += 1
+        place_table((room_cx, 4.5), "Long Table", "VIP", self.table_counter)
+
+        # ── Bride's Side (left of aisle) ──
+        # Family tables — closest to aisle (Round 8)
+        bride_family_positions = [
+            (8.5, 7.0),
+            (8.5, 10.0),
+            (8.5, 13.0),
+        ]
+        for pos in bride_family_positions:
+            self.table_counter += 1
+            place_table(pos, "Round 8", "Family", self.table_counter)
+
+        # Friends tables — farther from aisle (Round 10)
+        bride_friends_positions = [
+            (4.5, 7.0),
+            (4.5, 10.0),
+            (4.5, 13.0),
+        ]
+        for pos in bride_friends_positions:
+            self.table_counter += 1
+            place_table(pos, "Round 10", "Friends", self.table_counter)
+
+        # ── Groom's Side (right of aisle) — mirror layout ──
+        # Family tables — closest to aisle (Round 8)
+        groom_family_positions = [
+            (16.5, 7.0),
+            (16.5, 10.0),
+            (16.5, 13.0),
+        ]
+        for pos in groom_family_positions:
+            self.table_counter += 1
+            place_table(pos, "Round 8", "Family", self.table_counter)
+
+        # Friends tables — farther from aisle (Round 10)
+        groom_friends_positions = [
+            (20.5, 7.0),
+            (20.5, 10.0),
+            (20.5, 13.0),
+        ]
+        for pos in groom_friends_positions:
+            self.table_counter += 1
+            place_table(pos, "Round 10", "Friends", self.table_counter)
+
+        # ── General tables at the back ──
+        general_positions = [
+            (5.0, 17.0),
+            (10.0, 17.0),
+            (15.0, 17.0),
+            (20.0, 17.0),
+        ]
+        for pos in general_positions:
+            self.table_counter += 1
+            place_table(pos, "Rectangular", "General", self.table_counter)
+
     # ─── Table Creation ─────────────────────────────────────────────────
 
     def _add_table(self, table_type: str):
@@ -285,7 +428,7 @@ class SeatingChartPlanner:
             info["height"],
             outline=TABLE_COLORS[category],
             width=3,
-            fill=TABLE_COLORS[category] + "40",
+            fill=TABLE_COLORS[category],
             dpi=96,
             center_on_canvas=True,
         )
@@ -442,7 +585,7 @@ class SeatingChartPlanner:
                     y2,
                     outline=TABLE_COLORS.get(cat, "#DDA0DD"),
                     width=3,
-                    fill=TABLE_COLORS.get(cat, "#DDA0DD") + "40",
+                    fill=TABLE_COLORS.get(cat, "#DDA0DD"),
                     dpi=96,
                 )
 
