@@ -143,6 +143,10 @@ class DraggableRectangle:
 
         self.keyboard_state = canvas._keyboard_state
 
+        # Cache once at init — avoids repeated hasattr() string lookups on
+        # the hot paths (on_drag / on_resize_drag fire at ~60 Hz).
+        self._has_dispatch: bool = hasattr(canvas, "_dispatch_rect")
+
         self.canvas.tag_bind(self.rect, "<Button-1>", self.on_click)
         self.canvas.tag_bind(self.rect, "<B1-Motion>", self.on_drag)
         self.canvas.tag_bind(self.rect, "<ButtonRelease-1>", self._on_drag_end)
@@ -1299,6 +1303,12 @@ class DraggableRectangle:
 
     def on_click(self, event: "Event") -> None:
         """Handle mouse click on the rectangle body."""
+        if self._has_dispatch:
+            self.canvas._dispatch_rect("rect_on_click", self, self._builtin_on_click, event)
+        else:
+            self._builtin_on_click(event)
+
+    def _builtin_on_click(self, event: "Event") -> None:
         self.start_x = event.x
         self.start_y = event.y
 
@@ -1309,6 +1319,12 @@ class DraggableRectangle:
         Modifier keys:
             Shift: Lock movement to 45-degree angles (0°, 45°, 90°, 135°, etc.)
         """
+        if self._has_dispatch:
+            self.canvas._dispatch_rect("rect_on_drag", self, self._builtin_on_drag, event)
+        else:
+            self._builtin_on_drag(event)
+
+    def _builtin_on_drag(self, event: "Event") -> None:
         dx: float = event.x - self.start_x
         dy: float = event.y - self.start_y
 
@@ -1342,6 +1358,14 @@ class DraggableRectangle:
 
     def on_resize_click(self, event: "Event") -> None:
         """Handle mouse click on the resize handle."""
+        if self._has_dispatch:
+            self.canvas._dispatch_rect(
+                "rect_on_resize_click", self, self._builtin_on_resize_click, event
+            )
+        else:
+            self._builtin_on_resize_click(event)
+
+    def _builtin_on_resize_click(self, event: "Event") -> None:
         self.resize_start_x = event.x
         self.resize_start_y = event.y
 
@@ -1355,6 +1379,14 @@ class DraggableRectangle:
             Alt: Constrain to one dimension (horizontal or vertical)
             Shift+Ctrl: Maintain aspect ratio AND resize from center
         """
+        if self._has_dispatch:
+            self.canvas._dispatch_rect(
+                "rect_on_resize_drag", self, self._builtin_on_resize_drag, event
+            )
+        else:
+            self._builtin_on_resize_drag(event)
+
+    def _builtin_on_resize_drag(self, event: "Event") -> None:
         dx = event.x - self.resize_start_x
         dy = event.y - self.resize_start_y
 
@@ -1416,6 +1448,12 @@ class DraggableRectangle:
         Notifies the canvas that objects may have changed so it
         can snapshot the state for undo/redo history.
         """
+        if self._has_dispatch:
+            self.canvas._dispatch_rect("rect_on_drag_end", self, self._builtin_on_drag_end, event)
+        else:
+            self._builtin_on_drag_end(event)
+
+    def _builtin_on_drag_end(self, event: "Event") -> None:
         if hasattr(self.canvas, "_on_objects_changed"):
             self.canvas._on_objects_changed()
 
@@ -1426,6 +1464,14 @@ class DraggableRectangle:
         Notifies the canvas that objects may have changed so it
         can snapshot the state for undo/redo history.
         """
+        if self._has_dispatch:
+            self.canvas._dispatch_rect(
+                "rect_on_resize_end", self, self._builtin_on_resize_end, event
+            )
+        else:
+            self._builtin_on_resize_end(event)
+
+    def _builtin_on_resize_end(self, event: "Event") -> None:
         if hasattr(self.canvas, "_on_objects_changed"):
             self.canvas._on_objects_changed()
 

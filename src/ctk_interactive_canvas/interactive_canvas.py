@@ -9,7 +9,7 @@ Created: Tue Aug 6, 2024
 """
 
 from tkinter import Event, Canvas as TkCanvas
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 import customtkinter as ctk
 
@@ -25,7 +25,66 @@ class InteractiveCanvas(ctk.CTkCanvas):
     - Panning (middle mouse or space + drag)
     - Keyboard shortcuts (Delete key)
     - Callbacks for selection events
+    - Dynamic callback system via register_callback() / unregister_callback()
+
+    Dynamic Callback System
+    -----------------------
+    Every public interaction method is a hookable point.  Use
+    ``register_callback(hook_name, fn, mode)`` to intercept it:
+
+    * mode="before"   — fires *before* the built-in logic
+    * mode="after"    — fires *after* the built-in logic (default)
+    * mode="inplace"  — *replaces* the built-in logic entirely
+
+    Rectangle-level hooks (``rect_on_*``) receive the originating
+    ``DraggableRectangle`` as their first argument, followed by the
+    original event arguments.
+
+    Performance: the registry is a plain ``dict``.  When no callbacks are
+    registered for a hook, ``_dispatch`` short-circuits after a single
+    O(1) ``dict.__contains__`` check — zero overhead on hot paths such as
+    ``rect_on_drag`` / ``rect_on_resize_drag`` (~60 Hz).
+
+    All valid hook names are listed in ``InteractiveCanvas._HOOKABLE_METHODS``.
     """
+
+    _HOOKABLE_METHODS: FrozenSet[str] = frozenset(
+        {
+            # Canvas-level hooks
+            "on_click",
+            "on_drag_select",
+            "on_drag_release",
+            "on_middle_click",
+            "on_middle_drag",
+            "on_middle_release",
+            "on_space_press",
+            "on_space_release",
+            "on_delete",
+            "update_selection_area",
+            "toggle_selection",
+            "select_item",
+            "select_all",
+            "deselect_item",
+            "deselect_all",
+            "create_draggable_rectangle",
+            "copy_draggable_rectangle",
+            "delete_draggable_rectangle",
+            "zoom_in",
+            "zoom_out",
+            "on_zoom_wheel",
+            "attach_text_to_rectangle",
+            "move_attached_items",
+            "undo",
+            "redo",
+            # Rectangle-level hooks (dispatched via _dispatch_rect)
+            "rect_on_click",
+            "rect_on_drag",
+            "rect_on_drag_end",
+            "rect_on_resize_click",
+            "rect_on_resize_drag",
+            "rect_on_resize_end",
+        }
+    )
 
     def __init__(
         self,
@@ -85,6 +144,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._restoring_state: bool = False
         self._objects_changed: bool = False
 
+        # Dynamic callback registry: {hook_name: {mode: [(callable, suppress_during_restore)]}}
+        self._callbacks: Dict[str, Dict[str, List[Tuple[Callable, bool]]]] = {}
+
         self.enable_history = enable_history
         self.enable_zoom = enable_zoom
 
@@ -103,6 +165,182 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         if create_bindings:
             self._create_bindings()
+
+    # -------------------------------------------------------------------------
+    # Callback registry
+    # -------------------------------------------------------------------------
+
+    def register_callback(
+        self,
+        hook_name: str,
+        callback: Callable,
+        mode: str = "after",
+        suppress_during_restore: bool = False,
+    ) -> None:
+        """
+        Register a callback for a hookable method.
+
+        Args:
+            hook_name: Name of the hook (must be in ``_HOOKABLE_METHODS``).
+            callback: Callable to invoke.  Rectangle-level hooks (``rect_on_*``)
+                receive the ``DraggableRectangle`` as their first argument.
+            mode: One of:
+                * ``"before"``  — called *before* the built-in logic.
+                * ``"after"``   — called *after* the built-in logic (default).
+                * ``"inplace"`` — *replaces* the built-in logic entirely.
+                  Only the first registered inplace callback is used.
+            suppress_during_restore: If ``True``, this callback is silenced
+                while undo/redo state restoration is in progress.
+
+        Raises:
+            ValueError: If ``hook_name`` is not a valid hook or ``mode`` is invalid.
+        """
+        if hook_name not in self._HOOKABLE_METHODS:
+            raise ValueError(
+                f"Unknown hook: {hook_name!r}. " f"Valid hooks: {sorted(self._HOOKABLE_METHODS)}"
+            )
+        if mode not in ("before", "after", "inplace"):
+            raise ValueError(f"Invalid mode: {mode!r}. Must be 'before', 'after', or 'inplace'.")
+        if hook_name not in self._callbacks:
+            self._callbacks[hook_name] = {}
+        hook_dict = self._callbacks[hook_name]
+        if mode not in hook_dict:
+            hook_dict[mode] = []
+        hook_dict[mode].append((callback, suppress_during_restore))
+
+    def unregister_callback(
+        self,
+        hook_name: str,
+        callback: Callable,
+        mode: str = "after",
+    ) -> bool:
+        """
+        Unregister a previously registered callback.
+
+        When the last callback for a hook is removed, the hook entry is
+        deleted from the registry so the zero-overhead fast path is restored.
+
+        Args:
+            hook_name: Name of the hook.
+            callback: The callable to remove (matched by identity, not equality).
+            mode: The mode it was registered under (default: ``"after"``).
+
+        Returns:
+            ``True`` if the callback was found and removed, ``False`` otherwise.
+        """
+        if hook_name not in self._callbacks:
+            return False
+        hook_dict = self._callbacks[hook_name]
+        if mode not in hook_dict:
+            return False
+        entries = hook_dict[mode]
+        for i, (cb, _) in enumerate(entries):
+            if cb is callback:
+                entries.pop(i)
+                if not entries:
+                    del hook_dict[mode]
+                if not hook_dict:
+                    del self._callbacks[hook_name]
+                return True
+        return False
+
+    def _dispatch(self, hook_name: str, builtin_fn: Callable, *args: Any, **kwargs: Any) -> Any:
+        """
+        Dispatch a canvas-level hookable method through the callback registry.
+
+        Zero-overhead fast path: when ``hook_name`` has no active callbacks the
+        dict lookup short-circuits immediately and ``builtin_fn`` is invoked
+        directly, adding no measurable overhead to hot paths.
+
+        Args:
+            hook_name: Registry key identifying the hook.
+            builtin_fn: Bound built-in implementation (``self._builtin_*``).
+            *args: Positional arguments forwarded to callbacks and built-in.
+            **kwargs: Keyword arguments forwarded to callbacks and built-in.
+
+        Returns:
+            Return value of the built-in (or inplace) function.
+        """
+        if hook_name not in self._callbacks:
+            return builtin_fn(*args, **kwargs)
+
+        hooks = self._callbacks[hook_name]
+        restoring = self._restoring_state
+
+        for cb, suppress in hooks.get("before", ()):
+            if not (suppress and restoring):
+                cb(*args, **kwargs)
+
+        inplace_list = hooks.get("inplace")
+        if inplace_list:
+            cb, suppress = inplace_list[0]
+            result = (
+                builtin_fn(*args, **kwargs) if (suppress and restoring) else cb(*args, **kwargs)
+            )
+        else:
+            result = builtin_fn(*args, **kwargs)
+
+        for cb, suppress in hooks.get("after", ()):
+            if not (suppress and restoring):
+                cb(*args, **kwargs)
+
+        return result
+
+    def _dispatch_rect(
+        self,
+        hook_name: str,
+        rect: "DraggableRectangle",
+        builtin_fn: Callable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Dispatch a rectangle-level hookable method through the callback registry.
+
+        Identical semantics to ``_dispatch`` but prepends the originating
+        ``DraggableRectangle`` instance as the first argument to every callback,
+        so callers can identify which rectangle triggered the event.
+
+        Args:
+            hook_name: Registry key identifying the hook.
+            rect: The DraggableRectangle that originated the event.
+            builtin_fn: Bound built-in on the rectangle (``rect._builtin_*``).
+            *args: Event arguments forwarded after ``rect``.
+            **kwargs: Keyword arguments forwarded.
+
+        Returns:
+            Return value of the built-in (or inplace) function.
+        """
+        if hook_name not in self._callbacks:
+            return builtin_fn(*args, **kwargs)
+
+        hooks = self._callbacks[hook_name]
+        restoring = self._restoring_state
+
+        for cb, suppress in hooks.get("before", ()):
+            if not (suppress and restoring):
+                cb(rect, *args, **kwargs)
+
+        inplace_list = hooks.get("inplace")
+        if inplace_list:
+            cb, suppress = inplace_list[0]
+            result = (
+                builtin_fn(*args, **kwargs)
+                if (suppress and restoring)
+                else cb(rect, *args, **kwargs)
+            )
+        else:
+            result = builtin_fn(*args, **kwargs)
+
+        for cb, suppress in hooks.get("after", ()):
+            if not (suppress and restoring):
+                cb(rect, *args, **kwargs)
+
+        return result
+
+    # -------------------------------------------------------------------------
+    # Internal helpers (not hookable)
+    # -------------------------------------------------------------------------
 
     def _save_initial_state(self) -> None:
         """Save the initial empty state as history index 0."""
@@ -218,6 +456,27 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 return [0, 0, 0, 0]
         return coords
 
+    @staticmethod
+    def _get_key_by_value(dictionary: Dict[Any, Any], value: Any) -> Optional[Any]:
+        """
+        Find the first key corresponding to a value in a dictionary.
+
+        Args:
+            dictionary: The dictionary to search
+            value: The value to find
+
+        Returns:
+            The corresponding key, or None if not found
+        """
+        for key, val in dictionary.items():
+            if val == value:
+                return key
+        return None
+
+    # -------------------------------------------------------------------------
+    # Rectangle creation / copy / deletion
+    # -------------------------------------------------------------------------
+
     def create_draggable_rectangle(
         self,
         x1: float,
@@ -247,6 +506,30 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             The created DraggableRectangle instance
         """
+        return self._dispatch(
+            "create_draggable_rectangle",
+            self._builtin_create_draggable_rectangle,
+            x1,
+            y1,
+            x2,
+            y2,
+            offset=offset,
+            max_repetitions=max_repetitions,
+            center_on_canvas=center_on_canvas,
+            **kwargs,
+        )
+
+    def _builtin_create_draggable_rectangle(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        offset: Optional[List[int]] = None,
+        max_repetitions: int = 20,
+        center_on_canvas: bool = False,
+        **kwargs: Any,
+    ) -> DraggableRectangle:
         if offset is None:
             offset = [21, 21]
 
@@ -261,8 +544,6 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
             # Use canvasx/canvasy to get the TRUE visible center,
             # accounting for any panning or scrolling that has occurred.
-            # Without this, the center is computed in widget space which
-            # diverges from canvas space after any pan/scroll operation.
             center_x = self.canvasx(canvas_width / 2)
             center_y = self.canvasy(canvas_height / 2)
 
@@ -323,6 +604,22 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             The copied DraggableRectangle instance
         """
+        return self._dispatch(
+            "copy_draggable_rectangle",
+            self._builtin_copy_draggable_rectangle,
+            draggable_rect,
+            offset=offset,
+            max_repetitions=max_repetitions,
+            **kwargs,
+        )
+
+    def _builtin_copy_draggable_rectangle(
+        self,
+        draggable_rect: DraggableRectangle,
+        offset: Optional[List[int]] = None,
+        max_repetitions: int = 20,
+        **kwargs: Any,
+    ) -> DraggableRectangle:
         if offset is None:
             offset = [21, 21]
 
@@ -366,6 +663,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Args:
             item_id: The ID of the rectangle to delete
         """
+        self._dispatch(
+            "delete_draggable_rectangle",
+            self._builtin_delete_draggable_rectangle,
+            item_id,
+        )
+
+    def _builtin_delete_draggable_rectangle(self, item_id: int) -> None:
         if item_id not in self.objects:
             return
 
@@ -393,6 +697,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
         for attached_id in rect._attached_items:
             self.delete(attached_id)
         rect._attached_items.clear()
+
+    # -------------------------------------------------------------------------
+    # Selection
+    # -------------------------------------------------------------------------
 
     def get_selected(self) -> List[DraggableRectangle]:
         """
@@ -427,8 +735,106 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         return self._get_key_by_value(self.objects, draggable_rect)
 
+    def update_selection_area(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        """
+        Update selection based on drag rectangle.
+
+        Args:
+            x0: Top-left x of selection rectangle
+            y0: Top-left y of selection rectangle
+            x1: Bottom-right x of selection rectangle
+            y1: Bottom-right y of selection rectangle
+        """
+        self._dispatch(
+            "update_selection_area",
+            self._builtin_update_selection_area,
+            x0,
+            y0,
+            x1,
+            y1,
+        )
+
+    def _builtin_update_selection_area(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        selected = self.find_enclosed(x0, y0, x1, y1)
+        for item_id, obj in self.objects.items():
+            if obj.rect in selected and not obj.get_is_selected():
+                self.select_item(item_id)
+            elif obj.rect not in selected and obj.get_is_selected():
+                self.deselect_item(item_id)
+
+    def toggle_selection(self, item_id: int) -> None:
+        """
+        Toggle selection state of a rectangle.
+
+        Args:
+            item_id: The ID of the rectangle to toggle
+        """
+        self._dispatch("toggle_selection", self._builtin_toggle_selection, item_id)
+
+    def _builtin_toggle_selection(self, item_id: int) -> None:
+        if self.objects[item_id].get_is_selected():
+            self.deselect_item(item_id)
+        else:
+            self.select_item(item_id)
+
+    def select_item(self, item_id: int) -> None:
+        """
+        Select a rectangle.
+
+        Args:
+            item_id: The ID of the rectangle to select
+        """
+        self._dispatch("select_item", self._builtin_select_item, item_id)
+
+    def _builtin_select_item(self, item_id: int) -> None:
+        obj = self.objects[item_id]
+        obj.set_is_selected(True)
+        self.itemconfig(obj.rect, outline=self.select_outline_color)
+        self.selected_objects[item_id] = obj
+        self.select_callback()
+
+    def select_all(self) -> None:
+        """Select all rectangles on the canvas."""
+        self._dispatch("select_all", self._builtin_select_all)
+
+    def _builtin_select_all(self) -> None:
+        for item_id in self.objects:
+            self.select_item(item_id)
+
+    def deselect_item(self, item_id: int) -> None:
+        """
+        Deselect a rectangle.
+
+        Args:
+            item_id: The ID of the rectangle to deselect
+        """
+        self._dispatch("deselect_item", self._builtin_deselect_item, item_id)
+
+    def _builtin_deselect_item(self, item_id: int) -> None:
+        obj = self.objects[item_id]
+        obj.set_is_selected(False)
+        self.itemconfig(obj.rect, outline=obj.original_outline)
+        if item_id in self.selected_objects:
+            del self.selected_objects[item_id]
+        self.deselect_callback()
+
+    def deselect_all(self) -> None:
+        """Deselect all currently selected rectangles."""
+        self._dispatch("deselect_all", self._builtin_deselect_all)
+
+    def _builtin_deselect_all(self) -> None:
+        for item_id in list(self.selected_objects):
+            self.deselect_item(item_id)
+
+    # -------------------------------------------------------------------------
+    # Mouse and keyboard event handlers
+    # -------------------------------------------------------------------------
+
     def on_click(self, event: Event) -> None:
         """Handle left mouse button click."""
+        self._dispatch("on_click", self._builtin_on_click, event)
+
+    def _builtin_on_click(self, event: Event) -> None:
         if self.panning:
             self.scan_mark(event.x, event.y)
             return
@@ -461,6 +867,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def on_drag_select(self, event: Event) -> None:
         """Handle mouse drag for selection rectangle."""
+        self._dispatch("on_drag_select", self._builtin_on_drag_select, event)
+
+    def _builtin_on_drag_select(self, event: Event) -> None:
         if self.panning:
             self.scan_dragto(event.x, event.y, gain=1)
             return
@@ -493,6 +902,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def on_drag_release(self, event: Event) -> None:
         """Handle mouse button release after dragging."""
+        self._dispatch("on_drag_release", self._builtin_on_drag_release, event)
+
+    def _builtin_on_drag_release(self, event: Event) -> None:
         self.dragging = False
         if self.selection_rect:
             self.delete(self.selection_rect)
@@ -501,22 +913,42 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def on_middle_click(self, event: Event) -> None:
         """Handle middle mouse button press."""
+        self._dispatch("on_middle_click", self._builtin_on_middle_click, event)
+
+    def _builtin_on_middle_click(self, event: Event) -> None:
         self.scan_mark(event.x, event.y)
 
     def on_middle_drag(self, event: Event) -> None:
         """Handle middle mouse button drag."""
+        self._dispatch("on_middle_drag", self._builtin_on_middle_drag, event)
+
+    def _builtin_on_middle_drag(self, event: Event) -> None:
         self.scan_dragto(event.x, event.y, gain=1)
 
     def on_middle_release(self, event: Event) -> None:
         """Handle middle mouse button release."""
+        self._dispatch("on_middle_release", self._builtin_on_middle_release, event)
+
+    def _builtin_on_middle_release(self, event: Event) -> None:
+        pass
 
     def on_space_press(self, event: Event) -> None:
         """Handle spacebar press to enable panning mode."""
+        self._dispatch("on_space_press", self._builtin_on_space_press, event)
+
+    def _builtin_on_space_press(self, event: Event) -> None:
         self.panning = True
 
     def on_space_release(self, event: Event) -> None:
         """Handle spacebar release to disable panning mode."""
+        self._dispatch("on_space_release", self._builtin_on_space_release, event)
+
+    def _builtin_on_space_release(self, event: Event) -> None:
         self.panning = False
+
+    # -------------------------------------------------------------------------
+    # Delete handling (internal dispatcher is not hookable; on_delete is)
+    # -------------------------------------------------------------------------
 
     def _on_delete_key(self, event: Event) -> None:
         """
@@ -526,21 +958,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
         handling the event-argument mismatch gracefully. Falls back
         to the default on_delete if no user callback was provided.
 
-        The previous implementation bound directly to the user's callback,
-        which crashed because:
-        - tkinter always passes an Event to key bindings
-        - User callbacks may not accept an event argument (e.g. lambda: None)
-        - The fallback path was unreachable due to a truthy-check bug
-
         Args:
             event: The key event from tkinter
         """
         if self._user_delete_callback is not None:
             try:
-                # Try calling with event (proper tkinter callback signature)
                 self._user_delete_callback(event)
             except TypeError:
-                # Callback doesn't accept event — call without it
                 try:
                     self._user_delete_callback()
                 except TypeError:
@@ -557,6 +981,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Args:
             event: The key event
         """
+        self._dispatch("on_delete", self._builtin_on_delete, event)
+
+    def _builtin_on_delete(self, event: Event) -> None:
         selected_items = list(self.selected_objects.keys())
         if not selected_items:
             return
@@ -579,88 +1006,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.save_state()
         self._objects_changed = False
 
-    def update_selection_area(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        """
-        Update selection based on drag rectangle.
-
-        Args:
-            x0: Top-left x of selection rectangle
-            y0: Top-left y of selection rectangle
-            x1: Bottom-right x of selection rectangle
-            y1: Bottom-right y of selection rectangle
-        """
-        selected = self.find_enclosed(x0, y0, x1, y1)
-        for item_id, obj in self.objects.items():
-            if obj.rect in selected and not obj.get_is_selected():
-                self.select_item(item_id)
-            elif obj.rect not in selected and obj.get_is_selected():
-                self.deselect_item(item_id)
-
-    def toggle_selection(self, item_id: int) -> None:
-        """
-        Toggle selection state of a rectangle.
-
-        Args:
-            item_id: The ID of the rectangle to toggle
-        """
-        if self.objects[item_id].get_is_selected():
-            self.deselect_item(item_id)
-        else:
-            self.select_item(item_id)
-
-    def select_item(self, item_id: int) -> None:
-        """
-        Select a rectangle.
-
-        Args:
-            item_id: The ID of the rectangle to select
-        """
-        obj = self.objects[item_id]
-        obj.set_is_selected(True)
-        self.itemconfig(obj.rect, outline=self.select_outline_color)
-        self.selected_objects[item_id] = obj
-        self.select_callback()
-
-    def select_all(self) -> None:
-        """Select all rectangles on the canvas."""
-        for item_id in self.objects:
-            self.select_item(item_id)
-
-    def deselect_item(self, item_id: int) -> None:
-        """
-        Deselect a rectangle.
-
-        Args:
-            item_id: The ID of the rectangle to deselect
-        """
-        obj = self.objects[item_id]
-        obj.set_is_selected(False)
-        self.itemconfig(obj.rect, outline=obj.original_outline)
-        if item_id in self.selected_objects:
-            del self.selected_objects[item_id]
-        self.deselect_callback()
-
-    def deselect_all(self) -> None:
-        """Deselect all currently selected rectangles."""
-        for item_id in list(self.selected_objects):
-            self.deselect_item(item_id)
-
-    @staticmethod
-    def _get_key_by_value(dictionary: Dict[Any, Any], value: Any) -> Optional[Any]:
-        """
-        Find the first key corresponding to a value in a dictionary.
-
-        Args:
-            dictionary: The dictionary to search
-            value: The value to find
-
-        Returns:
-            The corresponding key, or None if not found
-        """
-        for key, val in dictionary.items():
-            if val == value:
-                return key
-        return None
+    # -------------------------------------------------------------------------
+    # History
+    # -------------------------------------------------------------------------
 
     def save_state(self) -> None:
         """
@@ -668,8 +1016,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         Captures full visual properties of every DraggableRectangle:
         coordinates, DPI, outline color, fill color, line width, handle
-        radius, and current selection state. This ensures that undo/redo
-        correctly restores the complete visual appearance.
+        radius, current selection state, and attached item metadata.
 
         This method is called automatically on:
         - Rectangle creation (create_draggable_rectangle)
@@ -704,6 +1051,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 # stack so that _restore_state can resurrect it in-place instead
                 # of creating a new instance (which would break caller references).
                 "rect_ref": obj,
+                "attached_items": self._snapshot_attached_items(obj),
             }
 
         # Truncate any future states if we're in the middle of the history
@@ -726,9 +1074,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         The initial empty-canvas state at index 0 is reachable, so
         undoing all operations returns to a blank canvas.
         """
+        self._dispatch("undo", self._builtin_undo)
+
+    def _builtin_undo(self) -> None:
         if not self.enable_history:
             return
-
         if self.history_index > 0:
             self.history_index -= 1
             self._restore_state(self.history_states[self.history_index])
@@ -739,9 +1089,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         Moves forward in the history stack if a future state exists.
         """
+        self._dispatch("redo", self._builtin_redo)
+
+    def _builtin_redo(self) -> None:
         if not self.enable_history:
             return
-
         if self.history_index < len(self.history_states) - 1:
             self.history_index += 1
             self._restore_state(self.history_states[self.history_index])
@@ -754,6 +1106,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         destroying or recreating the Python object, so all external references
         to this rectangle remain valid after an undo/redo operation.
 
+        Attached items are restored via full reconciliation (delete + recreate
+        from snapshot), which handles all cases correctly — items added, removed,
+        or repositioned between states.  Falls back to dx/dy movement for
+        history states saved before attached-item snapshots were introduced.
+
         Args:
             rect: The live DraggableRectangle instance to update.
             data: A single object entry from a history state dictionary.
@@ -764,18 +1121,30 @@ class InteractiveCanvas(ctk.CTkCanvas):
         line_width = data.get("line_width", 5)
         dpi = data.get("dpi", self.dpi)
 
-        # Compute positional delta from the current top-left before moving,
-        # so attached items (text labels, etc.) can be displaced by the same amount.
-        old_coords = self.coords(rect.rect)
-        dx = coords[0] - old_coords[0]
-        dy = coords[1] - old_coords[1]
+        saved_attached = data.get("attached_items")
+        if saved_attached is None:
+            # Backward compat: compute delta before updating geometry
+            old_coords = self.coords(rect.rect)
+            dx = coords[0] - old_coords[0]
+            dy = coords[1] - old_coords[1]
+        else:
+            # Full reconciliation: delete current attached items first
+            for attached_id in rect._attached_items:
+                self.delete(attached_id)
+            rect._attached_items.clear()
 
         # Update geometry of both canvas items
         self.coords(rect.rect, coords[0], coords[1], coords[2], coords[3])
         self.coords(rect.resize_handle, coords[2], coords[3])
 
-        # Move attached items by the same top-left delta so they track the rectangle
-        if dx or dy:
+        # Restore attached items
+        if saved_attached is not None:
+            for snapshot in saved_attached:
+                new_id = self._recreate_attached_item(snapshot)
+                if new_id is not None:
+                    rect._attached_items.append(new_id)
+        elif dx or dy:
+            # Backward compat fallback: move existing attached items by delta
             self.move_attached_items(rect, dx, dy)
 
         # Update visual appearance on the canvas
@@ -800,7 +1169,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
            canvas IDs stored directly on ``rect.rect`` / ``rect.resize_handle``.
         2. Re-binds all mouse-event handlers to the new item IDs.
         3. Syncs Python-side visual attributes from the saved snapshot.
-        4. Re-registers the object in the class-level weakref instance list
+        4. Recreates attached items from snapshot.
+        5. Re-registers the object in the class-level weakref instance list
            (which was pruned when ``delete()`` was called during undo).
 
         The net result is a live, fully interactive rectangle that is the *same*
@@ -845,6 +1215,15 @@ class InteractiveCanvas(ctk.CTkCanvas):
         rect.line_width = line_width
         rect.handle_radius = handle_radius
         rect.dpi = dpi
+
+        # Restore attached items from snapshot
+        saved_attached = data.get("attached_items")
+        if saved_attached:
+            rect._attached_items.clear()
+            for snapshot in saved_attached:
+                new_id = self._recreate_attached_item(snapshot)
+                if new_id is not None:
+                    rect._attached_items.append(new_id)
 
         # Re-register in class-level weakref tracking (removed by delete())
         rect_class = type(rect)
@@ -945,6 +1324,68 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self._suppress_registration = False
             self._restoring_state = False
 
+    # -------------------------------------------------------------------------
+    # Zoom
+    # -------------------------------------------------------------------------
+
+    def zoom_in(self, factor: float = 1.2) -> None:
+        """
+        Zoom in on the canvas, centered on the current view.
+
+        Scales all canvas items (rectangles, lines, text) via the native
+        canvas.scale() call, then performs PIL-based resizing on any
+        tracked images since canvas.scale() does not resize bitmaps.
+
+        Args:
+            factor: Zoom multiplier (default: 1.2)
+        """
+        self._dispatch("zoom_in", self._builtin_zoom_in, factor)
+
+    def _builtin_zoom_in(self, factor: float = 1.2) -> None:
+        if not self.enable_zoom:
+            return
+        new_zoom = self.zoom_level * factor
+        if new_zoom <= self.max_zoom:
+            cx, cy = self.get_view_center()
+            self.zoom_level = new_zoom
+            self.scale("all", cx, cy, factor, factor)
+            self._rescale_all_tracked_images()
+
+    def zoom_out(self, factor: float = 1.2) -> None:
+        """
+        Zoom out on the canvas, centered on the current view.
+
+        Args:
+            factor: Zoom divisor (default: 1.2)
+        """
+        self._dispatch("zoom_out", self._builtin_zoom_out, factor)
+
+    def _builtin_zoom_out(self, factor: float = 1.2) -> None:
+        if not self.enable_zoom:
+            return
+        new_zoom = self.zoom_level / factor
+        if new_zoom >= self.min_zoom:
+            cx, cy = self.get_view_center()
+            self.zoom_level = new_zoom
+            self.scale("all", cx, cy, 1 / factor, 1 / factor)
+            self._rescale_all_tracked_images()
+
+    def on_zoom_wheel(self, event: Event) -> None:
+        """Handle Alt+MouseWheel zoom."""
+        self._dispatch("on_zoom_wheel", self._builtin_on_zoom_wheel, event)
+
+    def _builtin_on_zoom_wheel(self, event: Event) -> None:
+        if not self.enable_zoom:
+            return
+        if event.delta > 0:
+            self.zoom_in(1.1)
+        else:
+            self.zoom_out(1.1)
+
+    # -------------------------------------------------------------------------
+    # Image tracking
+    # -------------------------------------------------------------------------
+
     def track_image(
         self,
         image_id: int,
@@ -1016,54 +1457,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
         for dead_id in dead_ids:
             self._tracked_images.pop(dead_id, None)
 
-    def zoom_in(self, factor: float = 1.2) -> None:
-        """
-        Zoom in on the canvas, centered on the current view.
-
-        Scales all canvas items (rectangles, lines, text) via the native
-        canvas.scale() call, then performs PIL-based resizing on any
-        tracked images since canvas.scale() does not resize bitmaps.
-
-        Args:
-            factor: Zoom multiplier (default: 1.2)
-        """
-        if not self.enable_zoom:
-            return
-
-        new_zoom = self.zoom_level * factor
-        if new_zoom <= self.max_zoom:
-            # Zoom from the visible center so the viewport stays anchored
-            cx, cy = self.get_view_center()
-            self.zoom_level = new_zoom
-            self.scale("all", cx, cy, factor, factor)
-            self._rescale_all_tracked_images()
-
-    def zoom_out(self, factor: float = 1.2) -> None:
-        """
-        Zoom out on the canvas, centered on the current view.
-
-        Args:
-            factor: Zoom divisor (default: 1.2)
-        """
-        if not self.enable_zoom:
-            return
-
-        new_zoom = self.zoom_level / factor
-        if new_zoom >= self.min_zoom:
-            cx, cy = self.get_view_center()
-            self.zoom_level = new_zoom
-            self.scale("all", cx, cy, 1 / factor, 1 / factor)
-            self._rescale_all_tracked_images()
-
-    def on_zoom_wheel(self, event: Event) -> None:
-        """Handle Alt+MouseWheel zoom."""
-        if not self.enable_zoom:
-            return
-
-        if event.delta > 0:
-            self.zoom_in(1.1)
-        else:
-            self.zoom_out(1.1)
+    # -------------------------------------------------------------------------
+    # Attached items
+    # -------------------------------------------------------------------------
 
     def attach_text_to_rectangle(self, text_id: int, rect: DraggableRectangle) -> None:
         """
@@ -1073,6 +1469,14 @@ class InteractiveCanvas(ctk.CTkCanvas):
             text_id: Canvas text item ID
             rect: DraggableRectangle to attach text to
         """
+        self._dispatch(
+            "attach_text_to_rectangle",
+            self._builtin_attach_text_to_rectangle,
+            text_id,
+            rect,
+        )
+
+    def _builtin_attach_text_to_rectangle(self, text_id: int, rect: DraggableRectangle) -> None:
         rect._attached_items.append(text_id)
 
     def move_attached_items(self, rect: DraggableRectangle, dx: float, dy: float) -> None:
@@ -1084,5 +1488,100 @@ class InteractiveCanvas(ctk.CTkCanvas):
             dx: X displacement
             dy: Y displacement
         """
+        self._dispatch(
+            "move_attached_items",
+            self._builtin_move_attached_items,
+            rect,
+            dx,
+            dy,
+        )
+
+    def _builtin_move_attached_items(self, rect: DraggableRectangle, dx: float, dy: float) -> None:
         for item_id in rect._attached_items:
             self.move(item_id, dx, dy)
+
+    def _snapshot_attached_items(self, rect: DraggableRectangle) -> List[Dict[str, Any]]:
+        """
+        Capture metadata of all canvas items attached to a rectangle.
+
+        Returns a list of serialisable dictionaries — one per attached item —
+        containing enough information to recreate the items later via
+        ``_recreate_attached_item()``.
+
+        Args:
+            rect: The rectangle whose attached items should be snapshotted.
+
+        Returns:
+            List of snapshot dicts (empty if the rectangle has no attachments).
+        """
+        snapshots: List[Dict[str, Any]] = []
+        for attached_id in rect._attached_items:
+            try:
+                item_type = self.type(attached_id)
+                item_coords = list(self.coords(attached_id))
+                snapshot: Dict[str, Any] = {
+                    "type": item_type,
+                    "coords": item_coords,
+                }
+                if item_type == "text":
+                    snapshot["text"] = self.itemcget(attached_id, "text")
+                    snapshot["font"] = self.itemcget(attached_id, "font")
+                    snapshot["fill"] = self.itemcget(attached_id, "fill")
+                    snapshot["anchor"] = self.itemcget(attached_id, "anchor")
+                elif item_type in ("line", "rectangle", "oval", "arc", "polygon"):
+                    snapshot["fill"] = self.itemcget(attached_id, "fill")
+                    snapshot["outline"] = self.itemcget(attached_id, "outline")
+                    snapshot["width"] = self.itemcget(attached_id, "width")
+                snapshot["tags"] = list(self.gettags(attached_id))
+                snapshots.append(snapshot)
+            except Exception:
+                pass  # Item may have been deleted externally
+        return snapshots
+
+    def _recreate_attached_item(self, snapshot: Dict[str, Any]) -> Optional[int]:
+        """
+        Recreate a single canvas item from a snapshot dictionary.
+
+        Args:
+            snapshot: A dictionary previously produced by ``_snapshot_attached_items()``.
+
+        Returns:
+            The new canvas item ID, or ``None`` if the type is unsupported.
+        """
+        item_type = snapshot["type"]
+        item_coords = snapshot["coords"]
+        tags = tuple(snapshot.get("tags", ()))
+
+        if item_type == "text":
+            return self.create_text(
+                *item_coords,
+                text=snapshot.get("text", ""),
+                font=snapshot.get("font", ""),
+                fill=snapshot.get("fill", "black"),
+                anchor=snapshot.get("anchor", "center"),
+                tags=tags,
+            )
+        elif item_type == "rectangle":
+            return self.create_rectangle(
+                *item_coords,
+                fill=snapshot.get("fill", ""),
+                outline=snapshot.get("outline", "black"),
+                width=float(snapshot.get("width", 1)),
+                tags=tags,
+            )
+        elif item_type == "line":
+            return self.create_line(
+                *item_coords,
+                fill=snapshot.get("fill", "black"),
+                width=float(snapshot.get("width", 1)),
+                tags=tags,
+            )
+        elif item_type == "oval":
+            return self.create_oval(
+                *item_coords,
+                fill=snapshot.get("fill", ""),
+                outline=snapshot.get("outline", "black"),
+                width=float(snapshot.get("width", 1)),
+                tags=tags,
+            )
+        return None

@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-15
+
+### Fixed
+- **Attached items lost after delete + undo/redo**: When a rectangle with text
+  labels was deleted (manually or via undo) and then restored (redo), labels
+  disappeared permanently. Root cause: `save_state()` never captured attached
+  item metadata, so `_resurrect_rect()` had nothing to restore. Fixed by:
+  1. Extending `save_state()` to snapshot each attached item's full metadata
+     (type, coords, text, font, fill, anchor, tags) via `_snapshot_attached_items()`.
+  2. Implementing `_recreate_attached_item()` to reconstruct any snapshotted
+     canvas item (text, rectangle, line, oval) from its metadata.
+  3. Updating `_resurrect_rect()` to call `_recreate_attached_item()` for every
+     snapshotted attachment, fully restoring labels on redo.
+  4. Replacing the dx/dy move in `_update_rect_in_place()` with full
+     reconciliation (delete current attachments, recreate from snapshot), which
+     correctly handles items added, removed, or repositioned between states.
+
+### Added
+- **Dynamic callback system** on `InteractiveCanvas`:
+  - `register_callback(hook_name, callback, mode, suppress_during_restore)` —
+    attach a callable to any hookable event. `mode` is one of:
+    * `"before"` — runs *before* built-in logic.
+    * `"after"` — runs *after* built-in logic (default).
+    * `"inplace"` — *replaces* built-in logic entirely.
+  - `unregister_callback(hook_name, callback, mode)` — remove a callback;
+    automatically cleans up empty registry entries to restore the fast path.
+  - `_dispatch(hook_name, builtin_fn, *args, **kwargs)` — internal dispatcher
+    with a zero-overhead fast path: a single O(1) dict lookup short-circuits to
+    the built-in when no callbacks are registered for that hook.
+  - `_dispatch_rect(hook_name, rect, builtin_fn, *args, **kwargs)` — same but
+    for rectangle-level hooks; prepends the `DraggableRectangle` instance as
+    the first argument to every callback.
+  - `InteractiveCanvas._HOOKABLE_METHODS` frozenset — exhaustive list of all
+    valid hook names (25 canvas-level + 6 rect-level).
+  - All public interaction methods on `InteractiveCanvas` split into a thin
+    dispatch wrapper and a `_builtin_*` implementation.
+  - All six interaction methods on `DraggableRectangle` (`on_click`, `on_drag`,
+    `_on_drag_end`, `on_resize_click`, `on_resize_drag`, `_on_resize_end`) now
+    dispatch through `canvas._dispatch_rect()` when the canvas supports it.
+  - `DraggableRectangle._has_dispatch` — boolean cached at construction time to
+    avoid repeated `hasattr()` string lookups on the ~60 Hz drag/resize paths.
+  - `suppress_during_restore` flag on individual callbacks silences them
+    during undo/redo state restoration without affecting other callbacks.
+
 ## [0.5.0] - 2026-03-14
 
 ### Fixed
@@ -315,7 +359,8 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.1...v0.4.2
