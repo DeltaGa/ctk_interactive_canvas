@@ -9,7 +9,7 @@ Created: Tue Aug 6, 2024
 """
 
 from tkinter import Event, Canvas as TkCanvas
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, cast
 
 import customtkinter as ctk
 
@@ -506,17 +506,20 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             The created DraggableRectangle instance
         """
-        return self._dispatch(
-            "create_draggable_rectangle",
-            self._builtin_create_draggable_rectangle,
-            x1,
-            y1,
-            x2,
-            y2,
-            offset=offset,
-            max_repetitions=max_repetitions,
-            center_on_canvas=center_on_canvas,
-            **kwargs,
+        return cast(
+            DraggableRectangle,
+            self._dispatch(
+                "create_draggable_rectangle",
+                self._builtin_create_draggable_rectangle,
+                x1,
+                y1,
+                x2,
+                y2,
+                offset=offset,
+                max_repetitions=max_repetitions,
+                center_on_canvas=center_on_canvas,
+                **kwargs,
+            ),
         )
 
     def _builtin_create_draggable_rectangle(
@@ -604,13 +607,16 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             The copied DraggableRectangle instance
         """
-        return self._dispatch(
-            "copy_draggable_rectangle",
-            self._builtin_copy_draggable_rectangle,
-            draggable_rect,
-            offset=offset,
-            max_repetitions=max_repetitions,
-            **kwargs,
+        return cast(
+            DraggableRectangle,
+            self._dispatch(
+                "copy_draggable_rectangle",
+                self._builtin_copy_draggable_rectangle,
+                draggable_rect,
+                offset=offset,
+                max_repetitions=max_repetitions,
+                **kwargs,
+            ),
         )
 
     def _builtin_copy_draggable_rectangle(
@@ -1553,35 +1559,47 @@ class InteractiveCanvas(ctk.CTkCanvas):
         tags = tuple(snapshot.get("tags", ()))
 
         if item_type == "text":
-            return self.create_text(
-                *item_coords,
-                text=snapshot.get("text", ""),
-                font=snapshot.get("font", ""),
-                fill=snapshot.get("fill", "black"),
-                anchor=snapshot.get("anchor", "center"),
-                tags=tags,
+            return cast(
+                int,
+                self.create_text(
+                    *item_coords,
+                    text=snapshot.get("text", ""),
+                    font=snapshot.get("font", ""),
+                    fill=snapshot.get("fill", "black"),
+                    anchor=snapshot.get("anchor", "center"),
+                    tags=tags,
+                ),
             )
         elif item_type == "rectangle":
-            return self.create_rectangle(
-                *item_coords,
-                fill=snapshot.get("fill", ""),
-                outline=snapshot.get("outline", "black"),
-                width=float(snapshot.get("width", 1)),
-                tags=tags,
+            return cast(
+                int,
+                self.create_rectangle(
+                    *item_coords,
+                    fill=snapshot.get("fill", ""),
+                    outline=snapshot.get("outline", "black"),
+                    width=float(snapshot.get("width", 1)),
+                    tags=tags,
+                ),
             )
         elif item_type == "line":
-            return self.create_line(
-                *item_coords,
-                fill=snapshot.get("fill", "black"),
-                width=float(snapshot.get("width", 1)),
-                tags=tags,
+            return cast(
+                int,
+                self.create_line(
+                    *item_coords,
+                    fill=snapshot.get("fill", "black"),
+                    width=float(snapshot.get("width", 1)),
+                    tags=tags,
+                ),
             )
         elif item_type == "oval":
-            return self.create_oval(
-                *item_coords,
-                fill=snapshot.get("fill", ""),
-                outline=snapshot.get("outline", "black"),
-                width=float(snapshot.get("width", 1)),
-                tags=tags,
+            return cast(
+                int,
+                self.create_oval(
+                    *item_coords,
+                    fill=snapshot.get("fill", ""),
+                    outline=snapshot.get("outline", "black"),
+                    width=float(snapshot.get("width", 1)),
+                    tags=tags,
+                ),
             )
         return None
