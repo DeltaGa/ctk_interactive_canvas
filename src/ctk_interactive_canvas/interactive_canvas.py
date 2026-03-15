@@ -32,7 +32,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         master: Optional[Any] = None,
         select_callback: Optional[Callable[[], None]] = None,
         deselect_callback: Optional[Callable[[], None]] = None,
-        delete_callback: Optional[Callable[[], None]] = None,
+        delete_callback: Optional[Callable[..., None]] = None,
         select_outline_color: str = "#16fff6",
         dpi: int = 300,
         create_bindings: bool = True,
@@ -390,13 +390,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Args:
             rect: The rectangle whose attached items should be deleted.
         """
-        if hasattr(rect, "_attached_items"):
-            for attached_id in rect._attached_items:
-                try:
-                    self.delete(attached_id)
-                except Exception:
-                    pass
-            rect._attached_items.clear()
+        for attached_id in rect._attached_items:
+            self.delete(attached_id)
+        rect._attached_items.clear()
 
     def get_selected(self) -> List[DraggableRectangle]:
         """
@@ -1067,8 +1063,6 @@ class InteractiveCanvas(ctk.CTkCanvas):
             text_id: Canvas text item ID
             rect: DraggableRectangle to attach text to
         """
-        if not hasattr(rect, "_attached_items"):
-            rect._attached_items = []
         rect._attached_items.append(text_id)
 
     def move_attached_items(self, rect: DraggableRectangle, dx: float, dy: float) -> None:
@@ -1080,9 +1074,5 @@ class InteractiveCanvas(ctk.CTkCanvas):
             dx: X displacement
             dy: Y displacement
         """
-        if hasattr(rect, "_attached_items"):
-            for item_id in rect._attached_items:
-                try:
-                    self.move(item_id, dx, dy)
-                except:
-                    pass
+        for item_id in rect._attached_items:
+            self.move(item_id, dx, dy)

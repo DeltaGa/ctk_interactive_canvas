@@ -125,6 +125,10 @@ class DraggableRectangle:
         self.handle_radius = radius
         self.fill_color = kwargs.get("fill", "")
 
+        # Canvas items attached to this rectangle (e.g. text labels) that move
+        # with it during drags. Declared here so mypy always sees the attribute.
+        self._attached_items: List[int] = []
+
         self.rect = canvas.create_rectangle(x1, y1, x2, y2, width=width, **kwargs)
         self.resize_handle = canvas.create_aa_circle(x2, y2, radius=radius, fill="#00497b")
 
