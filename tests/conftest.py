@@ -25,8 +25,8 @@ def app():
         yield app
         try:
             app.destroy()
-        except:
-            pass
+        except Exception:
+            raise RuntimeError("Failed to destroy the CTk app instance after testing.")
     except Exception as e:
         if "Can't find a usable tk.tcl" in str(e) or "_tkinter.TclError" in str(type(e)):
             pytest.skip(f"Tkinter not properly configured: {e}")

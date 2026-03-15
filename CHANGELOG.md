@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-03-14
+
+### Fixed
+- **Magic methods did not record history**: Operations via `+`, `-`, `*`, `/`,
+  `+=`, `-=`, `*=`, `/=`, `[i]=`, `&`, `|`, `-rect`, `+rect`, `abs(rect)` were
+  silently invisible to the undo/redo system — neither in-place mutations nor
+  newly created rectangles produced a history snapshot. Added a
+  `_save_history()` guard helper on `DraggableRectangle` and called it at the
+  end of every **leaf** magic method (delegates such as `__isub__` → `__iadd__`,
+  `__itruediv__` → `__imul__`, `__sub__`/`__radd__` → `__add__`, and
+  `__rmul__`/`__truediv__`/`__floordiv__` → `__mul__` are covered automatically
+  without double-saving). The helper is a no-op when history is disabled, during
+  state restore, or during suppressed-registration bulk operations.
+
 ## [0.4.2] - 2026-03-14
 
 ### Fixed
@@ -270,7 +284,8 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.3.3...v0.4.0

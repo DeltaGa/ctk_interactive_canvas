@@ -278,6 +278,7 @@ class DraggableRectangle:
 
         self.canvas.coords(self.rect, x0, y0, x1, y1)
         self.canvas.coords(self.resize_handle, x1, y1)
+        self._save_history()
 
     def __iter__(self) -> Iterator[float]:
         """
@@ -427,7 +428,7 @@ class DraggableRectangle:
         dx, dy = offset
         x0, y0, x1, y1 = self.canvas.coords(self.rect)
 
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas,
             x0 + dx,
             y0 + dy,
@@ -436,6 +437,8 @@ class DraggableRectangle:
             dpi=self.dpi,
             outline=self.original_outline,
         )
+        self._save_history()
+        return new_rect
 
     def __radd__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
@@ -487,7 +490,7 @@ class DraggableRectangle:
         dx, dy = offset
         x0, y0, x1, y1 = self.canvas.coords(self.rect)
 
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas,
             dx - x0,
             dy - y0,
@@ -496,6 +499,8 @@ class DraggableRectangle:
             dpi=self.dpi,
             outline=self.original_outline,
         )
+        self._save_history()
+        return new_rect
 
     def __mul__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
@@ -525,7 +530,7 @@ class DraggableRectangle:
         new_half_width = half_width * scalar
         new_half_height = half_height * scalar
 
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas,
             center_x - new_half_width,
             center_y - new_half_height,
@@ -534,6 +539,8 @@ class DraggableRectangle:
             dpi=self.dpi,
             outline=self.original_outline,
         )
+        self._save_history()
+        return new_rect
 
     def __rmul__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
@@ -618,6 +625,7 @@ class DraggableRectangle:
         dx, dy = offset
         self.canvas.move(self.rect, dx, dy)
         self.canvas.move(self.resize_handle, dx, dy)
+        self._save_history()
         return self
 
     def __isub__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
@@ -674,6 +682,7 @@ class DraggableRectangle:
 
         self.canvas.coords(self.rect, new_x0, new_y0, new_x1, new_y1)
         self.canvas.coords(self.resize_handle, new_x1, new_y1)
+        self._save_history()
         return self
 
     def __itruediv__(self, scalar: Union[int, float]) -> "DraggableRectangle":
@@ -731,9 +740,11 @@ class DraggableRectangle:
         if x0_i >= x1_i or y0_i >= y1_i:
             return None
 
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas, x0_i, y0_i, x1_i, y1_i, dpi=self.dpi, outline=self.original_outline
         )
+        self._save_history()
+        return new_rect
 
     def __or__(self, other: "DraggableRectangle") -> "DraggableRectangle":
         """
@@ -761,9 +772,11 @@ class DraggableRectangle:
         x1_u = max(x1_a, x1_b)
         y1_u = max(y1_a, y1_b)
 
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas, x0_u, y0_u, x1_u, y1_u, dpi=self.dpi, outline=self.original_outline
         )
+        self._save_history()
+        return new_rect
 
     def __neg__(self) -> "DraggableRectangle":
         """
@@ -773,9 +786,11 @@ class DraggableRectangle:
             New DraggableRectangle with negated coordinates.
         """
         x0, y0, x1, y1 = self.canvas.coords(self.rect)
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas, -x1, -y1, -x0, -y0, dpi=self.dpi, outline=self.original_outline
         )
+        self._save_history()
+        return new_rect
 
     def __pos__(self) -> "DraggableRectangle":
         """
@@ -785,9 +800,11 @@ class DraggableRectangle:
             New DraggableRectangle with same coordinates.
         """
         x0, y0, x1, y1 = self.canvas.coords(self.rect)
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas, x0, y0, x1, y1, dpi=self.dpi, outline=self.original_outline
         )
+        self._save_history()
+        return new_rect
 
     def __abs__(self) -> "DraggableRectangle":
         """
@@ -797,7 +814,7 @@ class DraggableRectangle:
             New DraggableRectangle with absolute coordinates.
         """
         x0, y0, x1, y1 = self.canvas.coords(self.rect)
-        return DraggableRectangle(
+        new_rect = DraggableRectangle(
             self.canvas,
             abs(x0),
             abs(y0),
@@ -806,6 +823,8 @@ class DraggableRectangle:
             dpi=self.dpi,
             outline=self.original_outline,
         )
+        self._save_history()
+        return new_rect
 
     def _area(self) -> float:
         """
@@ -825,6 +844,23 @@ class DraggableRectangle:
         self.__class__._instances = [
             ref for ref in self.__class__._instances if id(ref) != id(self._self_ref)
         ]
+
+    def _save_history(self) -> None:
+        """
+        Save a canvas history snapshot after a magic-method mutation.
+
+        Safe to call unconditionally at the end of every mutating magic method:
+        - No-ops when history is disabled on the canvas.
+        - No-ops during state restoration (_restoring_state) to avoid recursive saves.
+        - No-ops during _suppress_registration (e.g. bulk restore operations).
+        """
+        canvas = self.canvas
+        if (
+            getattr(canvas, "enable_history", False)
+            and not getattr(canvas, "_restoring_state", False)
+            and not getattr(canvas, "_suppress_registration", False)
+        ):
+            canvas.save_state()
 
     @classmethod
     def get_instances(cls) -> List["DraggableRectangle"]:

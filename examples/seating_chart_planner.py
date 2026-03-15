@@ -21,7 +21,6 @@ import json
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 
-
 TABLE_TYPES = {
     "Round 8": {"width": 60, "height": 60, "seats": 8, "shape": "circle"},
     "Round 10": {"width": 75, "height": 75, "seats": 10, "shape": "circle"},
