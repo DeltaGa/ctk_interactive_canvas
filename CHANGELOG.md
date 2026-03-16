@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-03-16
+
+### Changed — Performance Optimizations
+- **Hot-path `hasattr` elimination** (`DraggableRectangle.__init__`): Cached
+  `_has_move_attached` and `_has_objects_changed` booleans at construction time,
+  removing per-frame `hasattr` string lookups from `_builtin_on_drag` and
+  `_builtin_on_resize_drag` (~60 Hz paths).
+- **O(1) `_register_rectangle`** (`InteractiveCanvas`): Replaced O(n)
+  `rect not in self.objects.values()` scan with an `_registered_rects` set
+  for constant-time duplicate checks during rectangle creation.
+- **O(1) `get_item_id`** (`InteractiveCanvas`): Added `_rect_to_id` reverse
+  lookup map, replacing the O(n) `_get_key_by_value` linear scan.
+- **`coords()` fast-path reorder** (`InteractiveCanvas`): Common case (plain
+  int ID for regular rectangles) now hits the first branch, avoiding expensive
+  `gettags()` / `isinstance(str)` checks for the rare aa_circle path.
+- **Unconditional zoom attribute init** (`InteractiveCanvas.__init__`): `zoom_level`,
+  `_canvas_origin_x`, `_canvas_origin_y` are always initialized (identity values
+  when zoom is disabled), eliminating 3x `getattr` fallback overhead per call in
+  `_canvas_to_logical_coords` / `_logical_to_canvas_coords`.
+- **Optimized `_canvas_to_logical_coords` / `_logical_to_canvas_coords`**: Direct
+  attribute access instead of `getattr`; early return when zoom is at identity;
+  multiplication by inverse instead of repeated division.
+- **Direct attribute access in `_save_history`** (`DraggableRectangle`): Single
+  `hasattr` guard instead of 3x `getattr` per invocation.
+- **`_restore_state` selection reset** (`InteractiveCanvas`): Deselection now
+  iterates only `selected_objects` instead of all objects on the canvas.
+- **Set conversion in `_builtin_update_selection_area`**: `find_enclosed` result
+  converted to `set` once before the loop, replacing O(n) tuple membership tests.
+- **Pre-fetched coordinates in `align()` and `distribute()`**: Single tkinter
+  `coords()` call per rectangle (cached in a dict), replacing 2-3 calls per
+  iteration through `get_topleft_pos()` + `get_size()`.
+- **Attached items move with `set_topleft_pos`**: `set_topleft_pos()` now moves
+  attached items (text labels) along with the rectangle, fixing silent detachment
+  during `align()` / `distribute()` operations.
+- **`saves_history` decorator**: Instance method path (common case) checked before
+  classmethod path to avoid unnecessary `isinstance(first, type)` on every call.
+- **Single-pass `get_instances()`**: Replaced two list comprehensions with a single
+  loop that prunes dead weakrefs and collects alive instances simultaneously.
+- **Defensive `_aa_circle_canvas_ids` init**: Ensures the set exists after
+  `super().__init__()` for the `coords()` fast-path guard.
+
 ## [0.7.0] - 2026-03-16
 
 ### Added

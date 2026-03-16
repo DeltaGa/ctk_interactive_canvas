@@ -120,6 +120,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         super().__init__(master, **kwargs)
 
+        # Defensive: ensure _aa_circle_canvas_ids exists for coords() fast path
+        # even if CTkCanvas didn't set it (shouldn't happen, but safe).
+        if not hasattr(self, "_aa_circle_canvas_ids"):
+            self._aa_circle_canvas_ids: set[int] = set()
+
         self.select_callback = select_callback if select_callback is not None else lambda: None
         self.deselect_callback = (
             deselect_callback if deselect_callback is not None else lambda: None
@@ -132,6 +137,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.select_outline_color = select_outline_color
         self.selected_objects: dict[int, DraggableRectangle] = {}
         self.objects: dict[int, DraggableRectangle] = {}
+        # O(1) reverse lookups: id(rect) → item_id, and registered set
+        self._rect_to_id: dict[int, int] = {}
+        self._registered_rects: set[int] = set()
         self.dpi = dpi
 
         self.start_x: float | None = None
@@ -160,18 +168,17 @@ class InteractiveCanvas(ctk.CTkCanvas):
             # Save the initial empty state so undo can return to empty canvas
             self._save_initial_state()
 
+        # Always initialize zoom attributes so _canvas_to_logical_coords /
+        # _logical_to_canvas_coords can use direct attribute access (no getattr
+        # fallback). When zoom is disabled these stay at identity values.
+        self.zoom_level: float = 1.0
+        self._canvas_origin_x: float = 0.0
+        self._canvas_origin_y: float = 0.0
+
         if self.enable_zoom:
-            self.zoom_level: float = 1.0
             self.min_zoom: float = 0.1
             self.max_zoom: float = 10.0
             self._tracked_images: dict[int, dict] = {}
-            # Accumulated canvas origin: canvas_coord = zoom_level * logical_coord + origin.
-            # Updated on every zoom_in/zoom_out so that save_state() can normalise
-            # rectangle coordinates to zoom=1.0 logical space, and _restore_state()
-            # can scale them back to the current zoom, regardless of where each
-            # zoom operation was centred.
-            self._canvas_origin_x: float = 0.0
-            self._canvas_origin_y: float = 0.0
 
         if create_bindings:
             self._create_bindings()
@@ -435,12 +442,32 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         if self._suppress_registration:
             return
-        if rect not in self.objects.values():
+        rect_id = id(rect)
+        if rect_id not in self._registered_rects:
+            self._registered_rects.add(rect_id)
+            self._rect_to_id[rect_id] = self.next_item_id
             self.objects[self.next_item_id] = rect
             self.next_item_id += 1
 
     def coords(self, tag_or_id: Any, *args: Any) -> Any:
-        if isinstance(tag_or_id, str) and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
+        # Fast path: most calls are plain int IDs for regular rectangles.
+        # Check the common case first to avoid expensive gettags()/isinstance.
+        if isinstance(tag_or_id, int):
+            if tag_or_id not in self._aa_circle_canvas_ids:
+                coords = TkCanvas.coords(self, tag_or_id, *args)
+                if not coords:
+                    return [0, 0, 0, 0]
+                return coords
+            # aa_circle by int ID (rare)
+            coords = TkCanvas.coords(self, tag_or_id, *args[:2])
+            if len(args) == 3:
+                TkCanvas.itemconfigure(
+                    self,
+                    tag_or_id,
+                    font=("CustomTkinter_shapes_font", -args[2] * 2),
+                    text=self._get_char_from_radius(args[2]),
+                )
+        elif isinstance(tag_or_id, str) and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
             coords_id = self.find_withtag(tag_or_id)[0]
             coords = TkCanvas.coords(self, coords_id, *args[:2])
             if len(args) == 3:
@@ -448,16 +475,6 @@ class InteractiveCanvas(ctk.CTkCanvas):
                     self,
                     coords_id,
                     font=("CustomTkinter_shapes_font", -int(args[2]) * 2),
-                    text=self._get_char_from_radius(args[2]),
-                )
-        elif isinstance(tag_or_id, int) and tag_or_id in self._aa_circle_canvas_ids:
-            coords = TkCanvas.coords(self, tag_or_id, *args[:2])
-
-            if len(args) == 3:
-                TkCanvas.itemconfigure(
-                    self,
-                    tag_or_id,
-                    font=("CustomTkinter_shapes_font", -args[2] * 2),
                     text=self._get_char_from_radius(args[2]),
                 )
         else:
@@ -694,6 +711,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         # Clean up attached canvas items (text labels, etc.)
         self._delete_attached_items(obj)
 
+        # Clean up reverse lookup maps
+        rect_id = id(obj)
+        self._registered_rects.discard(rect_id)
+        self._rect_to_id.pop(rect_id, None)
+
         obj.delete()
         del self.objects[item_id]
         if item_id in self.selected_objects:
@@ -749,7 +771,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             The item ID or None if not found
         """
-        return self._get_key_by_value(self.objects, draggable_rect)
+        return self._rect_to_id.get(id(draggable_rect))
 
     def update_selection_area(self, x0: float, y0: float, x1: float, y1: float) -> None:
         """
@@ -771,7 +793,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         )
 
     def _builtin_update_selection_area(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        selected = self.find_enclosed(x0, y0, x1, y1)
+        selected = set(self.find_enclosed(x0, y0, x1, y1))
         for item_id, obj in self.objects.items():
             if obj.rect in selected and not obj.get_is_selected():
                 self.select_item(item_id)
@@ -1309,6 +1331,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
                     # events are rebound, but the Python identity is preserved.
                     self._resurrect_rect(rect_ref, obj_data)
                     self.objects[item_id] = rect_ref
+                    # Re-register in reverse lookup maps
+                    r_id = id(rect_ref)
+                    self._registered_rects.add(r_id)
+                    self._rect_to_id[r_id] = item_id
                 else:
                     # Backward-compat fallback for states saved before v0.4.2
                     # (no rect_ref field). Creates a new object as before.
@@ -1326,16 +1352,20 @@ class InteractiveCanvas(ctk.CTkCanvas):
                         radius=obj_data.get("handle_radius", 5),
                     )
                     self.objects[item_id] = rect
+                    # Register in reverse lookup maps
+                    r_id = id(rect)
+                    self._registered_rects.add(r_id)
+                    self._rect_to_id[r_id] = item_id
 
             # Restore next_item_id
             self.next_item_id = state["next_item_id"]
 
-            # Reset selection state without firing callbacks, then restore from snapshot
+            # Reset selection state without firing callbacks, then restore from snapshot.
+            # Only iterate previously-selected objects (not all objects).
+            for obj in self.selected_objects.values():
+                obj.set_is_selected(False)
+                self.itemconfig(obj.rect, outline=obj.original_outline)
             self.selected_objects.clear()
-            for obj in self.objects.values():
-                if obj.get_is_selected():
-                    obj.set_is_selected(False)
-                    self.itemconfig(obj.rect, outline=obj.original_outline)
 
             for item_id in state.get("selected", []):
                 if item_id in self.objects:
@@ -1497,13 +1527,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         X- and Y-components alternate in *coords* (x0, y0, x1, y1, ...).
         """
-        z = getattr(self, "zoom_level", 1.0)
-        ox = getattr(self, "_canvas_origin_x", 0.0)
-        oy = getattr(self, "_canvas_origin_y", 0.0)
-        result = []
-        for i, c in enumerate(coords):
-            result.append((c - (ox if i % 2 == 0 else oy)) / z)
-        return result
+        z = self.zoom_level
+        ox = self._canvas_origin_x
+        oy = self._canvas_origin_y
+        if z == 1.0 and ox == 0.0 and oy == 0.0:
+            return list(coords)
+        iz = 1.0 / z
+        return [(coords[i] - (ox if i % 2 == 0 else oy)) * iz for i in range(len(coords))]
 
     def _logical_to_canvas_coords(self, coords: list[float]) -> list[float]:
         """Convert zoom=1.0 logical coordinates to current canvas-space coordinates.
@@ -1511,13 +1541,12 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Inverse of _canvas_to_logical_coords:
             canvas_coord = zoom_level * logical_coord + origin
         """
-        z = getattr(self, "zoom_level", 1.0)
-        ox = getattr(self, "_canvas_origin_x", 0.0)
-        oy = getattr(self, "_canvas_origin_y", 0.0)
-        result = []
-        for i, c in enumerate(coords):
-            result.append(c * z + (ox if i % 2 == 0 else oy))
-        return result
+        z = self.zoom_level
+        ox = self._canvas_origin_x
+        oy = self._canvas_origin_y
+        if z == 1.0 and ox == 0.0 and oy == 0.0:
+            return list(coords)
+        return [coords[i] * z + (ox if i % 2 == 0 else oy) for i in range(len(coords))]
 
     # -------------------------------------------------------------------------
     # Attached items

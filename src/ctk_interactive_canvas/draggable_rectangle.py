@@ -67,13 +67,16 @@ def saves_history(
             first = args[0] if args else None
             if first is None:
                 return result
+            # Classmethod check first (isinstance(cls, type) is True), then
+            # instance method. Must check type before hasattr because the class
+            # itself has _save_history as an unbound method.
             if isinstance(first, type):
                 # Classmethod call: args[0] is the class, args[1] is rectangles
                 rects = args[1] if len(args) > 1 else kwargs.get("rectangles", [])
                 if rects and hasattr(rects[0], "_save_history"):
                     rects[0]._save_history()
             elif hasattr(first, "_save_history"):
-                # Instance method: args[0] is the DraggableRectangle
+                # Instance method: args[0] is a DraggableRectangle
                 first._save_history()
             return result
 
@@ -212,6 +215,8 @@ class DraggableRectangle:
         # Cache once at init — avoids repeated hasattr() string lookups on
         # the hot paths (on_drag / on_resize_drag fire at ~60 Hz).
         self._has_dispatch: bool = hasattr(canvas, "_dispatch_rect")
+        self._has_move_attached: bool = hasattr(canvas, "move_attached_items")
+        self._has_objects_changed: bool = hasattr(canvas, "_objects_changed")
 
         self.canvas.tag_bind(self.rect, "<Button-1>", self.on_click)
         self.canvas.tag_bind(self.rect, "<B1-Motion>", self.on_drag)
@@ -929,18 +934,29 @@ class DraggableRectangle:
         - No-ops during _suppress_registration (e.g. bulk restore operations).
         """
         canvas = self.canvas
+        # Single hasattr guard for non-InteractiveCanvas canvases; after that,
+        # direct attribute access avoids 3x getattr overhead per call.
+        if not hasattr(canvas, "enable_history"):
+            return
         if (
-            getattr(canvas, "enable_history", False)
-            and not getattr(canvas, "_restoring_state", False)
-            and not getattr(canvas, "_suppress_registration", False)
+            canvas.enable_history
+            and not canvas._restoring_state
+            and not canvas._suppress_registration
         ):
             canvas.save_state()
 
     @classmethod
     def get_instances(cls) -> list["DraggableRectangle"]:
         """Get all currently alive DraggableRectangle instances."""
-        cls._instances = [ref for ref in cls._instances if ref() is not None]
-        return [instance for ref in cls._instances if (instance := ref()) is not None]
+        alive: list["DraggableRectangle"] = []
+        new_refs: list[weakref.ref] = []
+        for ref in cls._instances:
+            obj = ref()
+            if obj is not None:
+                alive.append(obj)
+                new_refs.append(ref)
+        cls._instances = new_refs
+        return alive
 
     def set_topleft_pos(
         self,
@@ -978,6 +994,8 @@ class DraggableRectangle:
 
         self.canvas.move(self.rect, dx, dy)
         self.canvas.move(self.resize_handle, dx, dy)
+        if self._has_move_attached:
+            self.canvas.move_attached_items(self, dx, dy)
 
     def set_bottomright_pos(
         self,
@@ -1213,31 +1231,34 @@ class DraggableRectangle:
         if not rectangles:
             return
 
-        canvas_origin = relative_pos if relative_pos is not None else [0, 0]
-        first_rect = rectangles[0]
-        x1, y1 = first_rect.get_topleft_pos(relative_pos=canvas_origin)
+        ox, oy = (relative_pos[0], relative_pos[1]) if relative_pos is not None else (0.0, 0.0)
+
+        # Pre-fetch all coords in one pass (1 tkinter call per rect instead of 2-3)
+        cache = {r: r.canvas.coords(r.rect) for r in rectangles}
+
+        fc = cache[rectangles[0]]
+        fx, fy = fc[0] - ox, fc[1] - oy
+        fw, fh = fc[2] - fc[0], fc[3] - fc[1]
 
         for rect in rectangles:
-            if mode == "top":
-                x = rect.get_topleft_pos(relative_pos=canvas_origin)[0]
-                y = y1
-            elif mode == "middle":
-                x = rect.get_topleft_pos(relative_pos=canvas_origin)[0]
-                y = y1 + (first_rect.get_size()[1] // 2) - (rect.get_size()[1] // 2)
-            elif mode == "bottom":
-                x = rect.get_topleft_pos(relative_pos=canvas_origin)[0]
-                y = y1 + first_rect.get_size()[1] - rect.get_size()[1]
-            elif mode == "start":
-                x = x1
-                y = rect.get_topleft_pos(relative_pos=canvas_origin)[1]
-            elif mode == "center":
-                x = x1 + (first_rect.get_size()[0] // 2) - (rect.get_size()[0] // 2)
-                y = rect.get_topleft_pos(relative_pos=canvas_origin)[1]
-            elif mode == "end":
-                x = x1 + first_rect.get_size()[0] - rect.get_size()[0]
-                y = rect.get_topleft_pos(relative_pos=canvas_origin)[1]
+            rc = cache[rect]
+            rx, ry = rc[0] - ox, rc[1] - oy
+            rw, rh = rc[2] - rc[0], rc[3] - rc[1]
 
-            rect.set_topleft_pos([x, y], relative_pos=canvas_origin)
+            if mode == "top":
+                x, y = rx, fy
+            elif mode == "middle":
+                x, y = rx, fy + (fh // 2) - (rh // 2)
+            elif mode == "bottom":
+                x, y = rx, fy + fh - rh
+            elif mode == "start":
+                x, y = fx, ry
+            elif mode == "center":
+                x, y = fx + (fw // 2) - (rw // 2), ry
+            elif mode == "end":
+                x, y = fx + fw - rw, ry
+
+            rect.set_topleft_pos([x, y], relative_pos=[ox, oy])
 
     @classmethod
     @saves_history
@@ -1265,35 +1286,40 @@ class DraggableRectangle:
         if not rectangles or len(rectangles) < 2:
             return
 
-        canvas_origin = relative_pos if relative_pos is not None else [0, 0]
+        ox, oy = (relative_pos[0], relative_pos[1]) if relative_pos is not None else (0.0, 0.0)
+
+        # Pre-fetch all coords in one pass
+        cache = {r: r.canvas.coords(r.rect) for r in rectangles}
 
         if mode == "horizontal":
-            rectangles.sort(key=lambda r: r.get_topleft_pos(relative_pos=canvas_origin)[0])
-            total_width = sum(rect.get_size()[0] for rect in rectangles)
-            first_x = rectangles[0].get_topleft_pos(relative_pos=canvas_origin)[0]
-            last_x = rectangles[-1].get_topleft_pos(relative_pos=canvas_origin)[0]
+            rectangles.sort(key=lambda r: cache[r][0] - ox)
+            total_width = sum(cache[r][2] - cache[r][0] for r in rectangles)
+            first_x = cache[rectangles[0]][0] - ox
+            last_x = cache[rectangles[-1]][0] - ox
             total_space = last_x - first_x
             space_between = (total_space - total_width) // (len(rectangles) - 1)
 
             x = first_x
             for rect in rectangles:
-                current_y = rect.get_topleft_pos(relative_pos=canvas_origin)[1]
-                rect.set_topleft_pos([x, current_y], relative_pos=canvas_origin)
-                x += rect.get_size()[0] + space_between
+                rc = cache[rect]
+                current_y = rc[1] - oy
+                rect.set_topleft_pos([x, current_y], relative_pos=[ox, oy])
+                x += (rc[2] - rc[0]) + space_between
 
         elif mode == "vertical":
-            rectangles.sort(key=lambda r: r.get_topleft_pos(relative_pos=canvas_origin)[1])
-            total_height = sum(rect.get_size()[1] for rect in rectangles)
-            first_y = rectangles[0].get_topleft_pos(relative_pos=canvas_origin)[1]
-            last_y = rectangles[-1].get_topleft_pos(relative_pos=canvas_origin)[1]
+            rectangles.sort(key=lambda r: cache[r][1] - oy)
+            total_height = sum(cache[r][3] - cache[r][1] for r in rectangles)
+            first_y = cache[rectangles[0]][1] - oy
+            last_y = cache[rectangles[-1]][1] - oy
             total_space = last_y - first_y
             space_between = (total_space - total_height) // (len(rectangles) - 1)
 
             y = first_y
             for rect in rectangles:
-                current_x = rect.get_topleft_pos(relative_pos=canvas_origin)[0]
-                rect.set_topleft_pos([current_x, y], relative_pos=canvas_origin)
-                y += rect.get_size()[1] + space_between
+                rc = cache[rect]
+                current_x = rc[0] - ox
+                rect.set_topleft_pos([current_x, y], relative_pos=[ox, oy])
+                y += (rc[3] - rc[1]) + space_between
 
     def copy_(self, offset: list[float] | None = None, **kwargs: Any) -> "DraggableRectangle":
         """
@@ -1411,12 +1437,12 @@ class DraggableRectangle:
         for obj in self.canvas.get_selected():
             obj.canvas.move(obj.rect, dx, dy)
             obj.canvas.move(obj.resize_handle, dx, dy)
-            if hasattr(obj.canvas, "move_attached_items"):
+            if obj._has_move_attached:
                 obj.canvas.move_attached_items(obj, dx, dy)
 
         # Flag that objects have been moved so the canvas can save
         # history state on ButtonRelease.
-        if hasattr(self.canvas, "_objects_changed"):
+        if self._has_objects_changed:
             self.canvas._objects_changed = True
 
         self.start_x = event.x
@@ -1501,7 +1527,7 @@ class DraggableRectangle:
                 obj.canvas.coords(obj.resize_handle, new_x1, new_y1)
                 resized = True
 
-        if resized and hasattr(self.canvas, "_objects_changed"):
+        if resized and self._has_objects_changed:
             self.canvas._objects_changed = True
 
         self.resize_start_x = event.x
