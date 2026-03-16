@@ -8,8 +8,11 @@ Author: Tchicdje Kouojip Joram Smith (DeltaGa)
 Created: Tue Aug 6, 2024
 """
 
-from tkinter import Event, Canvas as TkCanvas
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, cast
+import contextlib
+from collections.abc import Callable
+from tkinter import Canvas as TkCanvas
+from tkinter import Event
+from typing import Any, cast
 
 import customtkinter as ctk
 
@@ -48,7 +51,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     All valid hook names are listed in ``InteractiveCanvas._HOOKABLE_METHODS``.
     """
 
-    _HOOKABLE_METHODS: FrozenSet[str] = frozenset(
+    _HOOKABLE_METHODS: frozenset[str] = frozenset(
         {
             # Canvas-level hooks
             "on_click",
@@ -88,10 +91,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def __init__(
         self,
-        master: Optional[Any] = None,
-        select_callback: Optional[Callable[[], None]] = None,
-        deselect_callback: Optional[Callable[[], None]] = None,
-        delete_callback: Optional[Callable[..., None]] = None,
+        master: Any | None = None,
+        select_callback: Callable[[], None] | None = None,
+        deselect_callback: Callable[[], None] | None = None,
+        delete_callback: Callable[..., None] | None = None,
         select_outline_color: str = "#16fff6",
         dpi: int = 300,
         create_bindings: bool = True,
@@ -127,13 +130,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._user_delete_callback = delete_callback
 
         self.select_outline_color = select_outline_color
-        self.selected_objects: Dict[int, DraggableRectangle] = {}
-        self.objects: Dict[int, DraggableRectangle] = {}
+        self.selected_objects: dict[int, DraggableRectangle] = {}
+        self.objects: dict[int, DraggableRectangle] = {}
         self.dpi = dpi
 
-        self.start_x: Optional[float] = None
-        self.start_y: Optional[float] = None
-        self.selection_rect: Optional[int] = None
+        self.start_x: float | None = None
+        self.start_y: float | None = None
+        self.selection_rect: int | None = None
         self.dragging: bool = False
         self.panning: bool = False
 
@@ -145,13 +148,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._objects_changed: bool = False
 
         # Dynamic callback registry: {hook_name: {mode: [(callable, suppress_during_restore)]}}
-        self._callbacks: Dict[str, Dict[str, List[Tuple[Callable, bool]]]] = {}
+        self._callbacks: dict[str, dict[str, list[tuple[Callable, bool]]]] = {}
 
         self.enable_history = enable_history
         self.enable_zoom = enable_zoom
 
         if self.enable_history:
-            self.history_states: List[Dict] = []
+            self.history_states: list[dict] = []
             self.history_index: int = -1
             self.max_history: int = 50
             # Save the initial empty state so undo can return to empty canvas
@@ -161,7 +164,14 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.zoom_level: float = 1.0
             self.min_zoom: float = 0.1
             self.max_zoom: float = 10.0
-            self._tracked_images: Dict[int, Dict] = {}
+            self._tracked_images: dict[int, dict] = {}
+            # Accumulated canvas origin: canvas_coord = zoom_level * logical_coord + origin.
+            # Updated on every zoom_in/zoom_out so that save_state() can normalise
+            # rectangle coordinates to zoom=1.0 logical space, and _restore_state()
+            # can scale them back to the current zoom, regardless of where each
+            # zoom operation was centred.
+            self._canvas_origin_x: float = 0.0
+            self._canvas_origin_y: float = 0.0
 
         if create_bindings:
             self._create_bindings()
@@ -347,7 +357,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.history_states = [{"objects": {}, "next_item_id": 0, "selected": []}]
         self.history_index = 0
 
-    def get_view_center(self) -> List[float]:
+    def get_view_center(self) -> list[float]:
         """
         Get the center of the currently visible canvas area.
 
@@ -361,7 +371,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         canvas_height = self.winfo_height() if self.winfo_height() > 1 else self.winfo_reqheight()
         return [self.canvasx(canvas_width / 2), self.canvasy(canvas_height / 2)]
 
-    def get_origin_pos(self, reference_item: int) -> List[float]:
+    def get_origin_pos(self, reference_item: int) -> list[float]:
         """
         Get the top-left position of a reference canvas item (e.g. a page boundary).
 
@@ -430,7 +440,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.next_item_id += 1
 
     def coords(self, tag_or_id: Any, *args: Any) -> Any:
-        if type(tag_or_id) == str and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
+        if isinstance(tag_or_id, str) and "ctk_aa_circle_font_element" in self.gettags(tag_or_id):
             coords_id = self.find_withtag(tag_or_id)[0]
             coords = TkCanvas.coords(self, coords_id, *args[:2])
             if len(args) == 3:
@@ -440,7 +450,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
                     font=("CustomTkinter_shapes_font", -int(args[2]) * 2),
                     text=self._get_char_from_radius(args[2]),
                 )
-        elif type(tag_or_id) == int and tag_or_id in self._aa_circle_canvas_ids:
+        elif isinstance(tag_or_id, int) and tag_or_id in self._aa_circle_canvas_ids:
             coords = TkCanvas.coords(self, tag_or_id, *args[:2])
 
             if len(args) == 3:
@@ -457,7 +467,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         return coords
 
     @staticmethod
-    def _get_key_by_value(dictionary: Dict[Any, Any], value: Any) -> Optional[Any]:
+    def _get_key_by_value(dictionary: dict[Any, Any], value: Any) -> Any | None:
         """
         Find the first key corresponding to a value in a dictionary.
 
@@ -483,7 +493,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         y1: float,
         x2: float,
         y2: float,
-        offset: Optional[List[int]] = None,
+        offset: list[int] | None = None,
         max_repetitions: int = 20,
         center_on_canvas: bool = False,
         **kwargs: Any,
@@ -528,7 +538,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         y1: float,
         x2: float,
         y2: float,
-        offset: Optional[List[int]] = None,
+        offset: list[int] | None = None,
         max_repetitions: int = 20,
         center_on_canvas: bool = False,
         **kwargs: Any,
@@ -591,7 +601,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def copy_draggable_rectangle(
         self,
         draggable_rect: DraggableRectangle,
-        offset: Optional[List[int]] = None,
+        offset: list[int] | None = None,
         max_repetitions: int = 20,
         **kwargs: Any,
     ) -> DraggableRectangle:
@@ -622,7 +632,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def _builtin_copy_draggable_rectangle(
         self,
         draggable_rect: DraggableRectangle,
-        offset: Optional[List[int]] = None,
+        offset: list[int] | None = None,
         max_repetitions: int = 20,
         **kwargs: Any,
     ) -> DraggableRectangle:
@@ -708,7 +718,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     # Selection
     # -------------------------------------------------------------------------
 
-    def get_selected(self) -> List[DraggableRectangle]:
+    def get_selected(self) -> list[DraggableRectangle]:
         """
         Get list of currently selected rectangles.
 
@@ -717,7 +727,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         return list(self.selected_objects.values())
 
-    def get_draggable_rectangle(self, item_id: int) -> Optional[DraggableRectangle]:
+    def get_draggable_rectangle(self, item_id: int) -> DraggableRectangle | None:
         """
         Get a draggable rectangle by its ID.
 
@@ -729,7 +739,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         return self.objects.get(item_id)
 
-    def get_item_id(self, draggable_rect: DraggableRectangle) -> Optional[int]:
+    def get_item_id(self, draggable_rect: DraggableRectangle) -> int | None:
         """
         Get the ID of a draggable rectangle.
 
@@ -856,10 +866,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 if obj.rect in clicked_items:
                     if shift_pressed and not obj.get_is_selected():
                         self.toggle_selection(item_id)
-                    elif not shift_pressed and not obj.get_is_selected():
-                        self.deselect_all()
-                        self.select_item(item_id)
-                    elif ctrl_pressed:
+                    elif not shift_pressed and not obj.get_is_selected() or ctrl_pressed:
                         self.deselect_all()
                         self.select_item(item_id)
                     else:
@@ -971,10 +978,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
             try:
                 self._user_delete_callback(event)
             except TypeError:
-                try:
+                with contextlib.suppress(TypeError):
                     self._user_delete_callback()
-                except TypeError:
-                    pass
         else:
             self.on_delete(event)
 
@@ -1038,16 +1043,15 @@ class InteractiveCanvas(ctk.CTkCanvas):
         if not self.enable_history:
             return
 
-        state: Dict = {
+        state: dict = {
             "objects": {},
             "next_item_id": self.next_item_id,
             "selected": list(self.selected_objects.keys()),
         }
 
         for item_id, obj in self.objects.items():
-            coords = list(obj)
             state["objects"][item_id] = {
-                "coords": coords,
+                "coords": self._canvas_to_logical_coords(list(obj)),
                 "dpi": obj.dpi,
                 "outline": obj.original_outline,
                 "fill": obj.fill_color,
@@ -1104,7 +1108,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.history_index += 1
             self._restore_state(self.history_states[self.history_index])
 
-    def _update_rect_in_place(self, rect: "DraggableRectangle", data: Dict) -> None:
+    def _update_rect_in_place(self, rect: "DraggableRectangle", data: dict) -> None:
         """
         Mutate an existing DraggableRectangle to match a saved state snapshot.
 
@@ -1121,7 +1125,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
             rect: The live DraggableRectangle instance to update.
             data: A single object entry from a history state dictionary.
         """
-        coords = data["coords"]
+        # Saved coords are in logical (zoom=1.0) space; scale to current canvas space.
+        coords = self._logical_to_canvas_coords(data["coords"])
         outline = data.get("outline", "black")
         fill = data.get("fill", "")
         line_width = data.get("line_width", 5)
@@ -1146,7 +1151,12 @@ class InteractiveCanvas(ctk.CTkCanvas):
         # Restore attached items
         if saved_attached is not None:
             for snapshot in saved_attached:
-                new_id = self._recreate_attached_item(snapshot)
+                # Attached item coords are also in logical space; scale back.
+                canvas_snapshot = {
+                    **snapshot,
+                    "coords": self._logical_to_canvas_coords(snapshot["coords"]),
+                }
+                new_id = self._recreate_attached_item(canvas_snapshot)
                 if new_id is not None:
                     rect._attached_items.append(new_id)
         elif dx or dy:
@@ -1162,7 +1172,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         rect.line_width = line_width
         rect.dpi = dpi
 
-    def _resurrect_rect(self, rect: "DraggableRectangle", data: Dict) -> None:
+    def _resurrect_rect(self, rect: "DraggableRectangle", data: dict) -> None:
         """
         Re-attach a previously deleted DraggableRectangle back onto the canvas.
 
@@ -1186,7 +1196,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
             rect: The DraggableRectangle whose canvas items need to be recreated.
             data: A single object entry from a history state dictionary.
         """
-        coords = data["coords"]
+        # Saved coords are in logical (zoom=1.0) space; scale to current canvas space.
+        coords = self._logical_to_canvas_coords(data["coords"])
         outline = data.get("outline", "black")
         fill = data.get("fill", "")
         line_width = data.get("line_width", 5)
@@ -1227,7 +1238,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         if saved_attached:
             rect._attached_items.clear()
             for snapshot in saved_attached:
-                new_id = self._recreate_attached_item(snapshot)
+                canvas_snapshot = {
+                    **snapshot,
+                    "coords": self._logical_to_canvas_coords(snapshot["coords"]),
+                }
+                new_id = self._recreate_attached_item(canvas_snapshot)
                 if new_id is not None:
                     rect._attached_items.append(new_id)
 
@@ -1236,7 +1251,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         if not any(ref is rect._self_ref for ref in rect_class._instances):
             rect_class._instances.append(rect._self_ref)
 
-    def _restore_state(self, state: Dict) -> None:
+    def _restore_state(self, state: dict) -> None:
         """
         Restore canvas to a saved state via in-place reconciliation.
 
@@ -1268,7 +1283,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         try:
             # Normalise saved keys to int once for all three steps
-            saved: Dict[int, Dict] = {
+            saved: dict[int, dict] = {
                 (int(k) if isinstance(k, str) else k): v for k, v in state["objects"].items()
             }
 
@@ -1353,6 +1368,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
         new_zoom = self.zoom_level * factor
         if new_zoom <= self.max_zoom:
             cx, cy = self.get_view_center()
+            # Keep origin in sync: canvas_coord = zoom * logical + origin
+            # After scaling by f around cx: new_origin = f*old_origin + cx*(1-f)
+            self._canvas_origin_x = factor * self._canvas_origin_x + cx * (1.0 - factor)
+            self._canvas_origin_y = factor * self._canvas_origin_y + cy * (1.0 - factor)
             self.zoom_level = new_zoom
             self.scale("all", cx, cy, factor, factor)
             self._rescale_all_tracked_images()
@@ -1372,8 +1391,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         new_zoom = self.zoom_level / factor
         if new_zoom >= self.min_zoom:
             cx, cy = self.get_view_center()
+            inv = 1.0 / factor
+            self._canvas_origin_x = inv * self._canvas_origin_x + cx * (1.0 - inv)
+            self._canvas_origin_y = inv * self._canvas_origin_y + cy * (1.0 - inv)
             self.zoom_level = new_zoom
-            self.scale("all", cx, cy, 1 / factor, 1 / factor)
+            self.scale("all", cx, cy, inv, inv)
             self._rescale_all_tracked_images()
 
     def on_zoom_wheel(self, event: Event) -> None:
@@ -1432,7 +1454,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def _rescale_tracked_image(self, image_id: int) -> None:
         """Rescale a single tracked image to the current zoom level."""
         try:
-            from PIL import Image as PILImage, ImageTk
+            from PIL import Image as PILImage
+            from PIL import ImageTk
         except ImportError:
             return
 
@@ -1462,6 +1485,39 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         for dead_id in dead_ids:
             self._tracked_images.pop(dead_id, None)
+
+    def _canvas_to_logical_coords(self, coords: list[float]) -> list[float]:
+        """Convert canvas-space coordinates to zoom=1.0 logical coordinates.
+
+        The affine relationship is:
+            canvas_coord = zoom_level * logical_coord + origin
+
+        So the inverse is:
+            logical_coord = (canvas_coord - origin) / zoom_level
+
+        X- and Y-components alternate in *coords* (x0, y0, x1, y1, ...).
+        """
+        z = getattr(self, "zoom_level", 1.0)
+        ox = getattr(self, "_canvas_origin_x", 0.0)
+        oy = getattr(self, "_canvas_origin_y", 0.0)
+        result = []
+        for i, c in enumerate(coords):
+            result.append((c - (ox if i % 2 == 0 else oy)) / z)
+        return result
+
+    def _logical_to_canvas_coords(self, coords: list[float]) -> list[float]:
+        """Convert zoom=1.0 logical coordinates to current canvas-space coordinates.
+
+        Inverse of _canvas_to_logical_coords:
+            canvas_coord = zoom_level * logical_coord + origin
+        """
+        z = getattr(self, "zoom_level", 1.0)
+        ox = getattr(self, "_canvas_origin_x", 0.0)
+        oy = getattr(self, "_canvas_origin_y", 0.0)
+        result = []
+        for i, c in enumerate(coords):
+            result.append(c * z + (ox if i % 2 == 0 else oy))
+        return result
 
     # -------------------------------------------------------------------------
     # Attached items
@@ -1506,7 +1562,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         for item_id in rect._attached_items:
             self.move(item_id, dx, dy)
 
-    def _snapshot_attached_items(self, rect: DraggableRectangle) -> List[Dict[str, Any]]:
+    def _snapshot_attached_items(self, rect: DraggableRectangle) -> list[dict[str, Any]]:
         """
         Capture metadata of all canvas items attached to a rectangle.
 
@@ -1520,12 +1576,12 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             List of snapshot dicts (empty if the rectangle has no attachments).
         """
-        snapshots: List[Dict[str, Any]] = []
+        snapshots: list[dict[str, Any]] = []
         for attached_id in rect._attached_items:
             try:
                 item_type = self.type(attached_id)
-                item_coords = list(self.coords(attached_id))
-                snapshot: Dict[str, Any] = {
+                item_coords = self._canvas_to_logical_coords(list(self.coords(attached_id)))
+                snapshot: dict[str, Any] = {
                     "type": item_type,
                     "coords": item_coords,
                 }
@@ -1544,7 +1600,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 pass  # Item may have been deleted externally
         return snapshots
 
-    def _recreate_attached_item(self, snapshot: Dict[str, Any]) -> Optional[int]:
+    def _recreate_attached_item(self, snapshot: dict[str, Any]) -> int | None:
         """
         Recreate a single canvas item from a snapshot dictionary.
 

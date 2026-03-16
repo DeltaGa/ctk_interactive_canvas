@@ -10,8 +10,8 @@ License: MIT
 """
 
 from .interactive_canvas import InteractiveCanvas
-from .draggable_rectangle import DraggableRectangle, KeyboardStateManager
+from .draggable_rectangle import DraggableRectangle, KeyboardStateManager, saves_history
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __author__ = "Tchicdje Kouojip Joram Smith (DeltaGa)"
-__all__ = ["InteractiveCanvas", "DraggableRectangle", "KeyboardStateManager"]
+__all__ = ["InteractiveCanvas", "DraggableRectangle", "KeyboardStateManager", "saves_history"]

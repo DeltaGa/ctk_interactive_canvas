@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-16
+
+### Added
+- **`saves_history` decorator** (`draggable_rectangle.py`, public API):
+  A parametrizable method decorator that automatically saves a canvas history
+  snapshot after the decorated method executes. Supports both instance methods
+  and classmethods of `DraggableRectangle`:
+  - `@saves_history` — bare form for instance methods.
+  - `@saves_history(only_if_result=True)` — skips the snapshot when the method
+    returns a falsy value (e.g. `None` from `__and__` when rects don't overlap).
+  - `@classmethod @saves_history` — classmethod form; infers the canvas from
+    the first element of the `rectangles` argument.
+  - Uses duck-typing (`hasattr`) so it is safe to use on any callable that has a
+    `_save_history()` method on its first argument.
+- **Undo/redo support for `align()` and `distribute()`**: Both classmethods now
+  trigger a history snapshot via `@saves_history`, so a single `Ctrl+Z` reverts
+  the entire alignment or distribution in one step.
+- All 11 leaf magic methods that previously called `_save_history()` manually
+  (`__setitem__`, `__add__`, `__rsub__`, `__mul__`, `__iadd__`, `__imul__`,
+  `__and__`, `__or__`, `__neg__`, `__pos__`, `__abs__`) are now decorated with
+  `@saves_history`, removing the need for the explicit call inside each method.
+
 ## [0.6.0] - 2026-03-15
 
 ### Fixed
