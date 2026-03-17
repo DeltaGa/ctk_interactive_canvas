@@ -63,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   group so its bounding-box center lands on the visible canvas center;
   `duplicate` starts at the source position.  Both use group-based overlap
   avoidance (21 px steps, up to 20 attempts) so relative layouts are preserved.
+- **Typing annotations converted to Python 3.9+ compatible syntax**: All type
+  annotations in `interactive_canvas.py`, `draggable_rectangle.py`, and
+  `_history.py` have been converted from Python 3.10+ syntax (PEP 585 generic
+  types, PEP 604 union syntax) to pre-3.9 compatible forms using the `typing`
+  module (e.g., `dict[...]` → `Dict[...]`, `X | Y` → `Union[X, Y]`).  The
+  codebase is now compatible with Python 3.9.  No functional changes; all tests
+  pass and mypy validation is clean.
 
 ### Fixed
 - **Overlap detection in `copy_draggable_rectangle`**: The old inner loop

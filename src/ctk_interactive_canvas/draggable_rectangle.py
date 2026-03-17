@@ -309,7 +309,7 @@ class DraggableRectangle:
         self_coords = self.canvas.coords(self.rect)
         other_coords = other.canvas.coords(other.rect)
 
-        return all(abs(a - b) < 1e-9 for a, b in zip(self_coords, other_coords, strict=True))
+        return all(abs(a - b) < 1e-9 for a, b in zip(self_coords, other_coords, strict=True))  # type: ignore[call-overload]
 
     def __ne__(self, other: object) -> bool:
         """
@@ -433,7 +433,7 @@ class DraggableRectangle:
         Returns:
             New DraggableRectangle at translated position.
         """
-        return self.__add__(offset)
+        return self.__add__(offset)  # type: ignore[no-any-return]
 
     def __sub__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
@@ -452,7 +452,7 @@ class DraggableRectangle:
             raise TypeError("offset must be a sequence of two numbers [dx, dy]")
 
         dx, dy = offset
-        return self.__add__([-dx, -dy])
+        return self.__add__([-dx, -dy])  # type: ignore[no-any-return]
 
     @saves_history
     def __rsub__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
@@ -535,7 +535,7 @@ class DraggableRectangle:
         Returns:
             New scaled DraggableRectangle.
         """
-        return self.__mul__(scalar)
+        return self.__mul__(scalar)  # type: ignore[no-any-return]
 
     def __truediv__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
@@ -561,7 +561,7 @@ class DraggableRectangle:
         if scalar < 0:
             raise ValueError("scaling factor must be non-negative")
 
-        return self.__mul__(1 / scalar)
+        return self.__mul__(1 / scalar)  # type: ignore[no-any-return]
 
     def __floordiv__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
@@ -587,7 +587,7 @@ class DraggableRectangle:
         if scalar < 0:
             raise ValueError("scaling factor must be non-negative")
 
-        return self.__mul__(1 // scalar if isinstance(scalar, int) else int(1 / scalar))
+        return self.__mul__(1 // scalar if isinstance(scalar, int) else int(1 / scalar))  # type: ignore[no-any-return]
 
     @saves_history
     def __iadd__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
@@ -628,7 +628,7 @@ class DraggableRectangle:
             raise TypeError("offset must be a sequence of two numbers [dx, dy]")
 
         dx, dy = offset
-        return self.__iadd__([-dx, -dy])
+        return self.__iadd__([-dx, -dy])  # type: ignore[no-any-return]
 
     @saves_history
     def __imul__(self, scalar: Union[int, float]) -> "DraggableRectangle":
@@ -692,7 +692,7 @@ class DraggableRectangle:
         if scalar < 0:
             raise ValueError("scaling factor must be non-negative")
 
-        return self.__imul__(1 / scalar)
+        return self.__imul__(1 / scalar)  # type: ignore[no-any-return]
 
     @saves_history(only_if_result=True)
     def __and__(self, other: "DraggableRectangle") -> Optional["DraggableRectangle"]:

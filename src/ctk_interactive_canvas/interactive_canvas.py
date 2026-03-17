@@ -1800,7 +1800,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         new_width = max(1, int(original.width * self.zoom_level))
         new_height = max(1, int(original.height * self.zoom_level))
 
-        resized = original.resize((new_width, new_height), PILImage.LANCZOS)
+        resized = original.resize((new_width, new_height), PILImage.LANCZOS)  # type: ignore[attr-defined]
         tk_image = ImageTk.PhotoImage(resized)
 
         # Keep a strong reference so tkinter doesn't garbage-collect it
