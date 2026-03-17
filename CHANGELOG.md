@@ -18,13 +18,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   singleton used when no custom instance is provided.
 - **Clipboard system** (`InteractiveCanvas`): Copy, cut, paste, and duplicate
   operations on selected rectangles, backed by an internal `_clipboard` snapshot
-  list.  All four operations are hookable via the existing callback system and
-  bound to standard keyboard shortcuts from `CanvasBindings`:
-  - `copy()` — `Ctrl+C`: snapshots selected rects into the clipboard.
-  - `cut()` — `Ctrl+X`: copies then deletes selected rects.
-  - `paste()` — `Ctrl+V`: recreates clipboard rects with a configurable offset,
-    selects the new copies, and saves history.
-  - `duplicate()` — `Ctrl+D`: copy + paste in one step.
+  list (zoom-invariant logical coordinates).  All four operations are hookable via
+  the existing callback system and bound to keyboard shortcuts from `CanvasBindings`:
+  - `copy()` — `Ctrl+C`: snapshots selected rects (geometry, colours, attached
+    items) into the clipboard; returns the source rect list.
+  - `cut()` — `Ctrl+X`: copies then deletes selected rects; saves history.
+  - `paste()` — `Ctrl+V`: recreates clipboard rects centered on the **current
+    viewport** (Adobe Illustrator-style); attached items are recreated alongside
+    their parents; group-based overlap avoidance keeps the relative layout intact;
+    new rects are selected automatically and history is saved.
+  - `duplicate()` — `Ctrl+D`: copy + paste in one step, placing new rects at the
+    source position (not viewport-centered) with group overlap avoidance.
+- **`after_result` callback mode**: New fourth mode for `register_callback()`.
+  Fires after the built-in logic with the operation's **return value prepended** as
+  the first positional argument.  Useful for receiving newly created rects from
+  `paste`, `duplicate`, `copy`, and `create_draggable_rectangle`, or the deleted
+  rect from `delete_draggable_rectangle`::
+
+      def on_paste(result, *args, **kwargs): ...
+      canvas.register_callback("paste", on_paste, mode="after_result")
 - **`_history.py`** — `saves_history` decorator extracted into its own module;
   previously lived inline in `draggable_rectangle.py`.
 - **`_keyboard.py`** — `KeyboardStateManager` extracted into its own module.
@@ -40,6 +52,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`bindings` parameter on `InteractiveCanvas.__init__`**: New optional keyword
   argument; defaults to `CanvasBindings()`.  `_create_bindings()` now reads all
   event strings from `self._bindings` instead of hardcoded literals.
+- **`max_history`, `min_zoom`, `max_zoom` now constructor parameters**:
+  Previously hardcoded to `50`, `0.1`, `10.0`.  All three are now keyword
+  arguments on `InteractiveCanvas.__init__` with the same defaults.
+- **`delete_draggable_rectangle` return type**: Changed from `-> None` to
+  `-> DraggableRectangle | None` — returns the deleted object (canvas items
+  already removed) so callers and `after_result` hooks can inspect or store it.
+- **`paste()` is viewport-centered, `duplicate()` is in-place**: The two
+  operations now differ in placement strategy.  `paste` shifts the clipboard
+  group so its bounding-box center lands on the visible canvas center;
+  `duplicate` starts at the source position.  Both use group-based overlap
+  avoidance (21 px steps, up to 20 attempts) so relative layouts are preserved.
+
+### Fixed
+- **Overlap detection in `copy_draggable_rectangle`**: The old inner loop
+  compared copied rect against all existing objects including itself, causing
+  immediate false-collision detection.  Now builds `existing_rect_ids` excluding
+  the new copy before entering the loop.
+- **Overlap detection in `create_draggable_rectangle`**: Replaced the O(n²)
+  double loop (find_overlapping + scan all objects per iteration) with a set
+  built once before the loop; inner check is now O(|overlapping_items|) via set
+  intersection.
+- **Examples missing `sys.path.insert`**: `alignment_demo.py`, `basic_usage.py`,
+  and `magic_methods_demo.py` were missing the `sys.path.insert(0, src/)` guard
+  at the top, meaning they would import a stale installed package rather than
+  local source when the package is not installed in development mode.
 
 ## [0.8.0] - 2026-03-16
 
