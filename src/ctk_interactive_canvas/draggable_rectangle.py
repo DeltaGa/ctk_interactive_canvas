@@ -309,7 +309,9 @@ class DraggableRectangle:
         self_coords = self.canvas.coords(self.rect)
         other_coords = other.canvas.coords(other.rect)
 
-        return all(abs(a - b) < 1e-9 for a, b in zip(self_coords, other_coords, strict=True))  # type: ignore[call-overload]
+        if len(self_coords) != len(other_coords):
+            return False
+        return all(abs(a - b) < 1e-9 for a, b in zip(self_coords, other_coords))
 
     def __ne__(self, other: object) -> bool:
         """
