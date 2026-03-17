@@ -7,40 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-03-16
-
-### Added
-- **`CanvasBindings` frozen dataclass** (`_bindings.py`, public API): Centralises
-  every tkinter event sequence used by `InteractiveCanvas` and `DraggableRectangle`
-  as named fields with sensible defaults.  Pass a custom instance to
-  `InteractiveCanvas(bindings=...)` to remap any shortcut (zoom, undo/redo, Delete,
-  panning, clipboard) without subclassing.  `DEFAULT_BINDINGS` is the module-level
-  singleton used when no custom instance is provided.
-- **Clipboard system** (`InteractiveCanvas`): Copy, cut, paste, and duplicate
-  operations on selected rectangles, backed by an internal `_clipboard` snapshot
-  list.  All four operations are hookable via the existing callback system and
-  bound to standard keyboard shortcuts from `CanvasBindings`:
-  - `copy()` — `Ctrl+C`: snapshots selected rects into the clipboard.
-  - `cut()` — `Ctrl+X`: copies then deletes selected rects.
-  - `paste()` — `Ctrl+V`: recreates clipboard rects with a configurable offset,
-    selects the new copies, and saves history.
-  - `duplicate()` — `Ctrl+D`: copy + paste in one step.
-- **`_history.py`** — `saves_history` decorator extracted into its own module;
-  previously lived inline in `draggable_rectangle.py`.
-- **`_keyboard.py`** — `KeyboardStateManager` extracted into its own module.
-- **`_units.py`** — `mm_to_px` / `px_to_mm` pure-function utilities extracted
-  into their own module; usable without a running canvas.
-- **`STYLE.md`** — Python style guide for contributors and AI coding agents.
-- **`OPTIMIZATION.md`** — Performance principles for the parent-child GUI pattern.
-
-### Changed
-- **Module decomposition**: `draggable_rectangle.py` and `interactive_canvas.py`
-  refactored to import from the four new private modules.  Public API is unchanged;
-  all symbols are still exported from `__init__.py`.
-- **`bindings` parameter on `InteractiveCanvas.__init__`**: New optional keyword
-  argument; defaults to `CanvasBindings()`.  `_create_bindings()` now reads all
-  event strings from `self._bindings` instead of hardcoded literals.
-
 ## [0.8.0] - 2026-03-16
 
 ### Changed — Performance Optimizations
@@ -456,10 +422,7 @@ Maintenance and compatibility release improving code quality, testing infrastruc
 - Proper package structure with relative imports
 - Phase 1 critical bug fixes completed
 
-[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.8.0...v0.9.0
-[0.8.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.6.0...v0.7.0
+[Unreleased]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.6.0...HEAD
 [0.6.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/DeltaGa/ctk_interactive_canvas/compare/v0.4.2...v0.4.3

@@ -9,21 +9,118 @@ Author: Tchicdje Kouojip Joram Smith (DeltaGa)
 Enhanced: Dave Erickson
 """
 
+import functools
 import logging
 import math
 import weakref
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, Optional
-
-from ._bindings import CanvasBindings, DEFAULT_BINDINGS
-from ._history import saves_history
-from ._keyboard import KeyboardStateManager
-from ._units import mm_to_px, px_to_mm
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     from tkinter import Event
 
     from .interactive_canvas import InteractiveCanvas
+
+
+def saves_history(
+    func: Optional[Callable] = None,
+    *,
+    only_if_result: bool = False,
+) -> Any:
+    """Decorator that saves a canvas history snapshot after the method executes.
+
+    Can be applied to both instance methods and classmethods of
+    ``DraggableRectangle``.  Uses duck-typing (``hasattr``) so it works
+    regardless of class-definition order.
+
+    For classmethods the first argument is the class itself; the second
+    argument must be the ``rectangles`` list (the ``align`` / ``distribute``
+    convention).  History is saved through ``rectangles[0]._save_history()``.
+
+    Args:
+        only_if_result: When *True*, the snapshot is skipped if the decorated
+            method returns a falsy value (e.g. ``None`` for a failed
+            intersection in ``__and__``).
+
+    Examples::
+
+        # Plain usage (instance method)
+        @saves_history
+        def __iadd__(self, offset): ...
+
+        # With parameter (classmethod that may return None)
+        @saves_history(only_if_result=True)
+        def __and__(self, other): ...
+
+        # Classmethod
+        @classmethod
+        @saves_history
+        def align(cls, rectangles, mode, relative_pos=None): ...
+    """
+
+    def decorator(f: Callable) -> Callable:
+        @functools.wraps(f)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            result = f(*args, **kwargs)
+            if only_if_result and not result:
+                return result
+            first = args[0] if args else None
+            if first is None:
+                return result
+            # Classmethod check first (isinstance(cls, type) is True), then
+            # instance method. Must check type before hasattr because the class
+            # itself has _save_history as an unbound method.
+            if isinstance(first, type):
+                # Classmethod call: args[0] is the class, args[1] is rectangles
+                rects = args[1] if len(args) > 1 else kwargs.get("rectangles", [])
+                if rects and hasattr(rects[0], "_save_history"):
+                    rects[0]._save_history()
+            elif hasattr(first, "_save_history"):
+                # Instance method: args[0] is a DraggableRectangle
+                first._save_history()
+            return result
+
+        return wrapper
+
+    if func is not None:
+        # Bare decorator: @saves_history
+        return decorator(func)
+    # Parameterised: @saves_history(only_if_result=True)
+    return decorator
+
+
+class KeyboardStateManager:
+    """Manages keyboard modifier state per canvas instance."""
+
+    def __init__(self) -> None:
+        """Initialize keyboard state tracking."""
+        self.shift_held: bool = False
+        self.alt_held: bool = False
+        self.ctrl_held: bool = False
+
+    def on_shift_press(self, event: "Event") -> None:
+        """Handle Shift key press."""
+        self.shift_held = True
+
+    def on_shift_release(self, event: "Event") -> None:
+        """Handle Shift key release."""
+        self.shift_held = False
+
+    def on_alt_press(self, event: "Event") -> None:
+        """Handle Alt key press."""
+        self.alt_held = True
+
+    def on_alt_release(self, event: "Event") -> None:
+        """Handle Alt key release."""
+        self.alt_held = False
+
+    def on_ctrl_press(self, event: "Event") -> None:
+        """Handle Ctrl key press."""
+        self.ctrl_held = True
+
+    def on_ctrl_release(self, event: "Event") -> None:
+        """Handle Ctrl key release."""
+        self.ctrl_held = False
 
 
 class DraggableRectangle:
@@ -104,16 +201,14 @@ class DraggableRectangle:
         self.rect = canvas.create_rectangle(x1, y1, x2, y2, width=width, **kwargs)
         self.resize_handle = canvas.create_aa_circle(x2, y2, radius=radius, fill="#00497b")
 
-        _b: CanvasBindings = getattr(canvas, "_bindings", DEFAULT_BINDINGS)
-
         if not hasattr(canvas, "_keyboard_state"):
             canvas._keyboard_state = KeyboardStateManager()
-            canvas.bind_all(_b.shift_press, canvas._keyboard_state.on_shift_press)
-            canvas.bind_all(_b.shift_release, canvas._keyboard_state.on_shift_release)
-            canvas.bind_all(_b.alt_press, canvas._keyboard_state.on_alt_press)
-            canvas.bind_all(_b.alt_release, canvas._keyboard_state.on_alt_release)
-            canvas.bind_all(_b.ctrl_press, canvas._keyboard_state.on_ctrl_press)
-            canvas.bind_all(_b.ctrl_release, canvas._keyboard_state.on_ctrl_release)
+            canvas.bind_all("<Shift_L>", canvas._keyboard_state.on_shift_press)
+            canvas.bind_all("<KeyRelease-Shift_L>", canvas._keyboard_state.on_shift_release)
+            canvas.bind_all("<Alt_L>", canvas._keyboard_state.on_alt_press)
+            canvas.bind_all("<KeyRelease-Alt_L>", canvas._keyboard_state.on_alt_release)
+            canvas.bind_all("<Control_L>", canvas._keyboard_state.on_ctrl_press)
+            canvas.bind_all("<KeyRelease-Control_L>", canvas._keyboard_state.on_ctrl_release)
 
         self.keyboard_state = canvas._keyboard_state
 
@@ -123,12 +218,12 @@ class DraggableRectangle:
         self._has_move_attached: bool = hasattr(canvas, "move_attached_items")
         self._has_objects_changed: bool = hasattr(canvas, "_objects_changed")
 
-        self.canvas.tag_bind(self.rect, _b.mouse_left_click, self.on_click)
-        self.canvas.tag_bind(self.rect, _b.mouse_left_drag, self.on_drag)
-        self.canvas.tag_bind(self.rect, _b.mouse_left_release, self._on_drag_end)
-        self.canvas.tag_bind(self.resize_handle, _b.mouse_left_click, self.on_resize_click)
-        self.canvas.tag_bind(self.resize_handle, _b.mouse_left_drag, self.on_resize_drag)
-        self.canvas.tag_bind(self.resize_handle, _b.mouse_left_release, self._on_resize_end)
+        self.canvas.tag_bind(self.rect, "<Button-1>", self.on_click)
+        self.canvas.tag_bind(self.rect, "<B1-Motion>", self.on_drag)
+        self.canvas.tag_bind(self.rect, "<ButtonRelease-1>", self._on_drag_end)
+        self.canvas.tag_bind(self.resize_handle, "<Button-1>", self.on_resize_click)
+        self.canvas.tag_bind(self.resize_handle, "<B1-Motion>", self.on_resize_drag)
+        self.canvas.tag_bind(self.resize_handle, "<ButtonRelease-1>", self._on_resize_end)
 
         self._self_ref = weakref.ref(self)
         self.__class__._instances.append(self._self_ref)
@@ -1139,15 +1234,14 @@ class DraggableRectangle:
         ox, oy = (relative_pos[0], relative_pos[1]) if relative_pos is not None else (0.0, 0.0)
 
         # Pre-fetch all coords in one pass (1 tkinter call per rect instead of 2-3)
-        # Use id(r) as keys — DraggableRectangle.__hash__ is mutable (coord-based)
-        cache = {id(r): r.canvas.coords(r.rect) for r in rectangles}
+        cache = {r: r.canvas.coords(r.rect) for r in rectangles}
 
-        fc = cache[id(rectangles[0])]
+        fc = cache[rectangles[0]]
         fx, fy = fc[0] - ox, fc[1] - oy
         fw, fh = fc[2] - fc[0], fc[3] - fc[1]
 
         for rect in rectangles:
-            rc = cache[id(rect)]
+            rc = cache[rect]
             rx, ry = rc[0] - ox, rc[1] - oy
             rw, rh = rc[2] - rc[0], rc[3] - rc[1]
 
@@ -1195,35 +1289,34 @@ class DraggableRectangle:
         ox, oy = (relative_pos[0], relative_pos[1]) if relative_pos is not None else (0.0, 0.0)
 
         # Pre-fetch all coords in one pass
-        # Use id(r) as keys — DraggableRectangle.__hash__ is mutable (coord-based)
-        cache = {id(r): r.canvas.coords(r.rect) for r in rectangles}
+        cache = {r: r.canvas.coords(r.rect) for r in rectangles}
 
         if mode == "horizontal":
-            rectangles.sort(key=lambda r: cache[id(r)][0] - ox)
-            total_width = sum(cache[id(r)][2] - cache[id(r)][0] for r in rectangles)
-            first_x = cache[id(rectangles[0])][0] - ox
-            last_x = cache[id(rectangles[-1])][0] - ox
+            rectangles.sort(key=lambda r: cache[r][0] - ox)
+            total_width = sum(cache[r][2] - cache[r][0] for r in rectangles)
+            first_x = cache[rectangles[0]][0] - ox
+            last_x = cache[rectangles[-1]][0] - ox
             total_space = last_x - first_x
             space_between = (total_space - total_width) // (len(rectangles) - 1)
 
             x = first_x
             for rect in rectangles:
-                rc = cache[id(rect)]
+                rc = cache[rect]
                 current_y = rc[1] - oy
                 rect.set_topleft_pos([x, current_y], relative_pos=[ox, oy])
                 x += (rc[2] - rc[0]) + space_between
 
         elif mode == "vertical":
-            rectangles.sort(key=lambda r: cache[id(r)][1] - oy)
-            total_height = sum(cache[id(r)][3] - cache[id(r)][1] for r in rectangles)
-            first_y = cache[id(rectangles[0])][1] - oy
-            last_y = cache[id(rectangles[-1])][1] - oy
+            rectangles.sort(key=lambda r: cache[r][1] - oy)
+            total_height = sum(cache[r][3] - cache[r][1] for r in rectangles)
+            first_y = cache[rectangles[0]][1] - oy
+            last_y = cache[rectangles[-1]][1] - oy
             total_space = last_y - first_y
             space_between = (total_space - total_height) // (len(rectangles) - 1)
 
             y = first_y
             for rect in rectangles:
-                rc = cache[id(rect)]
+                rc = cache[rect]
                 current_x = rc[0] - ox
                 rect.set_topleft_pos([current_x, y], relative_pos=[ox, oy])
                 y += (rc[3] - rc[1]) + space_between
@@ -1488,7 +1581,15 @@ class DraggableRectangle:
         Raises:
             Exception: If conversion fails.
         """
-        return mm_to_px(millimeters, dpi if dpi is not None else self.dpi)
+        if dpi is None:
+            dpi = self.dpi
+
+        try:
+            pixels = int(millimeters * dpi / 25.4)
+            return pixels
+        except Exception as e:
+            logging.error(f"Failed to convert millimeters to pixels: {e}")
+            raise
 
     def convert_px_to_mm(self, pixels: float, dpi: int | None = None) -> float:
         """
@@ -1504,4 +1605,12 @@ class DraggableRectangle:
         Raises:
             Exception: If conversion fails.
         """
-        return px_to_mm(pixels, dpi if dpi is not None else self.dpi)
+        if dpi is None:
+            dpi = self.dpi
+
+        try:
+            millimeters = pixels * 25.4 / dpi
+            return millimeters
+        except Exception as e:
+            logging.error(f"Failed to convert pixels to millimeters: {e}")
+            raise
