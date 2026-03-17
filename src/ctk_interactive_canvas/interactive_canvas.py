@@ -12,7 +12,7 @@ import contextlib
 from collections.abc import Callable
 from tkinter import Canvas as TkCanvas
 from tkinter import Event
-from typing import Any, cast
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union, cast
 
 import customtkinter as ctk
 
@@ -52,7 +52,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     All valid hook names are listed in ``InteractiveCanvas._HOOKABLE_METHODS``.
     """
 
-    _HOOKABLE_METHODS: frozenset[str] = frozenset(
+    _HOOKABLE_METHODS: FrozenSet[str] = frozenset(
         {
             # Canvas-level hooks
             "on_click",
@@ -96,16 +96,16 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def __init__(
         self,
-        master: Any | None = None,
-        select_callback: Callable[[], None] | None = None,
-        deselect_callback: Callable[[], None] | None = None,
-        delete_callback: Callable[..., None] | None = None,
+        master: Optional[Any] = None,
+        select_callback: Optional[Callable[[], None]] = None,
+        deselect_callback: Optional[Callable[[], None]] = None,
+        delete_callback: Optional[Callable[..., None]] = None,
         select_outline_color: str = "#16fff6",
         dpi: int = 300,
         create_bindings: bool = True,
         enable_history: bool = True,
         enable_zoom: bool = True,
-        bindings: CanvasBindings | None = None,
+        bindings: Optional[CanvasBindings] = None,
         max_history: int = 50,
         min_zoom: float = 0.1,
         max_zoom: float = 10.0,
@@ -141,7 +141,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         # Defensive: ensure _aa_circle_canvas_ids exists for coords() fast path
         # even if CTkCanvas didn't set it (shouldn't happen, but safe).
         if not hasattr(self, "_aa_circle_canvas_ids"):
-            self._aa_circle_canvas_ids: set[int] = set()
+            self._aa_circle_canvas_ids: Set[int] = set()
 
         self.select_callback = select_callback if select_callback is not None else lambda: None
         self.deselect_callback = (
@@ -153,16 +153,16 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._user_delete_callback = delete_callback
 
         self.select_outline_color = select_outline_color
-        self.selected_objects: dict[int, DraggableRectangle] = {}
-        self.objects: dict[int, DraggableRectangle] = {}
+        self.selected_objects: Dict[int, DraggableRectangle] = {}
+        self.objects: Dict[int, DraggableRectangle] = {}
         # O(1) reverse lookups: id(rect) → item_id, and registered set
-        self._rect_to_id: dict[int, int] = {}
-        self._registered_rects: set[int] = set()
+        self._rect_to_id: Dict[int, int] = {}
+        self._registered_rects: Set[int] = set()
         self.dpi = dpi
 
-        self.start_x: float | None = None
-        self.start_y: float | None = None
-        self.selection_rect: int | None = None
+        self.start_x: Optional[float] = None
+        self.start_y: Optional[float] = None
+        self.selection_rect: Optional[int] = None
         self.dragging: bool = False
         self.panning: bool = False
 
@@ -174,11 +174,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._objects_changed: bool = False
 
         # Dynamic callback registry: {hook_name: {mode: [(callable, suppress_during_restore)]}}
-        self._callbacks: dict[str, dict[str, list[tuple[Callable, bool]]]] = {}
+        self._callbacks: Dict[str, Dict[str, List[Tuple[Callable, bool]]]] = {}
 
         # Clipboard — internal snapshot list for copy/cut/paste/duplicate.
         # Each entry mirrors the save_state() per-object format.
-        self._clipboard: list[dict] = []
+        self._clipboard: List[Dict] = []
 
         self.enable_history = enable_history
         self.enable_zoom = enable_zoom
@@ -189,7 +189,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._bindings: CanvasBindings = bindings if bindings is not None else CanvasBindings()
 
         if self.enable_history:
-            self.history_states: list[dict] = []
+            self.history_states: List[Dict] = []
             self.history_index: int = -1
             self.max_history: int = max_history
             # Save the initial empty state so undo can return to empty canvas
@@ -205,7 +205,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         if self.enable_zoom:
             self.min_zoom: float = min_zoom
             self.max_zoom: float = max_zoom
-            self._tracked_images: dict[int, dict] = {}
+            self._tracked_images: Dict[int, Dict] = {}
 
         if create_bindings:
             self._create_bindings()
@@ -413,7 +413,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.history_states = [{"objects": {}, "next_item_id": 0, "selected": []}]
         self.history_index = 0
 
-    def get_view_center(self) -> list[float]:
+    def get_view_center(self) -> List[float]:
         """
         Get the center of the currently visible canvas area.
 
@@ -427,7 +427,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         canvas_height = self.winfo_height() if self.winfo_height() > 1 else self.winfo_reqheight()
         return [self.canvasx(canvas_width / 2), self.canvasy(canvas_height / 2)]
 
-    def get_origin_pos(self, reference_item: int) -> list[float]:
+    def get_origin_pos(self, reference_item: int) -> List[float]:
         """
         Get the top-left position of a reference canvas item (e.g. a page boundary).
 
@@ -543,7 +543,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         return coords
 
     @staticmethod
-    def _get_key_by_value(dictionary: dict[Any, Any], value: Any) -> Any | None:
+    def _get_key_by_value(dictionary: Dict[Any, Any], value: Any) -> Optional[Any]:
         """
         Find the first key corresponding to a value in a dictionary.
 
@@ -569,7 +569,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         y1: float,
         x2: float,
         y2: float,
-        offset: list[int] | None = None,
+        offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
         center_on_canvas: bool = False,
         **kwargs: Any,
@@ -614,7 +614,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         y1: float,
         x2: float,
         y2: float,
-        offset: list[int] | None = None,
+        offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
         center_on_canvas: bool = False,
         **kwargs: Any,
@@ -645,7 +645,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         # Build a set of existing rect canvas IDs once — O(n) upfront so the
         # inner check per repetition is O(|overlapping_items|) via set intersection.
-        existing_rect_ids: set[int] = {
+        existing_rect_ids: Set[int] = {
             obj.rect for obj in self.objects.values() if obj is not draggable_rect
         }
         repetitions = 0
@@ -672,7 +672,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def copy_draggable_rectangle(
         self,
         draggable_rect: DraggableRectangle,
-        offset: list[int] | None = None,
+        offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
         **kwargs: Any,
     ) -> DraggableRectangle:
@@ -703,7 +703,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def _builtin_copy_draggable_rectangle(
         self,
         draggable_rect: DraggableRectangle,
-        offset: list[int] | None = None,
+        offset: Optional[List[int]] = None,
         max_repetitions: int = 20,
         **kwargs: Any,
     ) -> DraggableRectangle:
@@ -713,7 +713,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         new_draggable_rect = draggable_rect.copy_(**kwargs)
 
         # Exclude the new copy itself from overlap detection.
-        existing_rect_ids: set[int] = {
+        existing_rect_ids: Set[int] = {
             obj.rect for obj in self.objects.values() if obj is not new_draggable_rect
         }
         origin = new_draggable_rect.get_topleft_pos()
@@ -738,7 +738,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         return new_draggable_rect
 
-    def delete_draggable_rectangle(self, item_id: int) -> "DraggableRectangle | None":
+    def delete_draggable_rectangle(self, item_id: int) -> Optional["DraggableRectangle"]:
         """
         Delete a draggable rectangle by its ID.
 
@@ -766,7 +766,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             ),
         )
 
-    def _builtin_delete_draggable_rectangle(self, item_id: int) -> "DraggableRectangle | None":
+    def _builtin_delete_draggable_rectangle(self, item_id: int) -> Optional["DraggableRectangle"]:
         if item_id not in self.objects:
             return None
 
@@ -806,7 +806,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     # Selection
     # -------------------------------------------------------------------------
 
-    def get_selected(self) -> list[DraggableRectangle]:
+    def get_selected(self) -> List[DraggableRectangle]:
         """
         Get list of currently selected rectangles.
 
@@ -815,7 +815,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         return list(self.selected_objects.values())
 
-    def get_draggable_rectangle(self, item_id: int) -> DraggableRectangle | None:
+    def get_draggable_rectangle(self, item_id: int) -> Optional[DraggableRectangle]:
         """
         Get a draggable rectangle by its ID.
 
@@ -827,7 +827,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         return self.objects.get(item_id)
 
-    def get_item_id(self, draggable_rect: DraggableRectangle) -> int | None:
+    def get_item_id(self, draggable_rect: DraggableRectangle) -> Optional[int]:
         """
         Get the ID of a draggable rectangle.
 
@@ -1200,7 +1200,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     # Clipboard — copy / cut / paste / duplicate
     # -------------------------------------------------------------------------
 
-    def copy(self) -> list["DraggableRectangle"]:
+    def copy(self) -> List["DraggableRectangle"]:
         """
         Copy the current selection to the internal clipboard.
 
@@ -1212,14 +1212,14 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Register an ``after_result`` hook to receive them::
 
             canvas.register_callback("copy", fn, mode="after_result")
-            # fn(copied_rects: list[DraggableRectangle])
+            # fn(copied_rects: List[DraggableRectangle])
         """
         return cast(
-            "list[DraggableRectangle]",
+            "List[DraggableRectangle]",
             self._dispatch("copy", self._builtin_copy),
         )
 
-    def _builtin_copy(self) -> "list[DraggableRectangle]":
+    def _builtin_copy(self) -> "List[DraggableRectangle]":
         if not self.selected_objects:
             return []
         rects = list(self.selected_objects.values())
@@ -1237,7 +1237,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         ]
         return rects
 
-    def cut(self) -> "list[DraggableRectangle]":
+    def cut(self) -> "List[DraggableRectangle]":
         """
         Cut the current selection: copy to clipboard then delete.
 
@@ -1248,14 +1248,14 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Register an ``after_result`` hook to receive them::
 
             canvas.register_callback("cut", fn, mode="after_result")
-            # fn(cut_rects: list[DraggableRectangle])
+            # fn(cut_rects: List[DraggableRectangle])
         """
         return cast(
-            "list[DraggableRectangle]",
+            "List[DraggableRectangle]",
             self._dispatch("cut", self._builtin_cut),
         )
 
-    def _builtin_cut(self) -> "list[DraggableRectangle]":
+    def _builtin_cut(self) -> "List[DraggableRectangle]":
         if not self.selected_objects:
             return []
         rects = self._builtin_copy()
@@ -1265,7 +1265,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.save_state()
         return rects
 
-    def paste(self) -> "list[DraggableRectangle]":
+    def paste(self) -> "List[DraggableRectangle]":
         """
         Paste clipboard contents, **centered on the current view**.
 
@@ -1281,19 +1281,19 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Register an ``after_result`` hook to receive them::
 
             canvas.register_callback("paste", fn, mode="after_result")
-            # fn(pasted_rects: list[DraggableRectangle])
+            # fn(pasted_rects: List[DraggableRectangle])
         """
         return cast(
-            "list[DraggableRectangle]",
+            "List[DraggableRectangle]",
             self._dispatch("paste", self._builtin_paste),
         )
 
-    def _builtin_paste(self) -> "list[DraggableRectangle]":
+    def _builtin_paste(self) -> "List[DraggableRectangle]":
         if not self._clipboard:
             return []
         return self._paste_impl(center_on_view=True)
 
-    def duplicate(self) -> "list[DraggableRectangle]":
+    def duplicate(self) -> "List[DraggableRectangle]":
         """
         Duplicate the current selection in-place (Ctrl+D).
 
@@ -1307,24 +1307,24 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Register an ``after_result`` hook to receive them::
 
             canvas.register_callback("duplicate", fn, mode="after_result")
-            # fn(duplicated_rects: list[DraggableRectangle])
+            # fn(duplicated_rects: List[DraggableRectangle])
         """
         return cast(
-            "list[DraggableRectangle]",
+            "List[DraggableRectangle]",
             self._dispatch("duplicate", self._builtin_duplicate),
         )
 
-    def _builtin_duplicate(self) -> "list[DraggableRectangle]":
+    def _builtin_duplicate(self) -> "List[DraggableRectangle]":
         if not self.selected_objects:
             return []
         self._builtin_copy()
         return self._paste_impl(center_on_view=False)
 
     # Overlap avoidance constants used by _paste_impl (match _builtin_create defaults).
-    _PASTE_OVERLAP_OFFSET: tuple[int, int] = (21, 21)
+    _PASTE_OVERLAP_OFFSET: Tuple[int, int] = (21, 21)
     _PASTE_MAX_REPETITIONS: int = 20
 
-    def _paste_impl(self, center_on_view: bool = True) -> "list[DraggableRectangle]":
+    def _paste_impl(self, center_on_view: bool = True) -> "List[DraggableRectangle]":
         """
         Shared placement engine for paste() and duplicate().
 
@@ -1364,7 +1364,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             dy = 0.0
 
         self._builtin_deselect_all()
-        new_rects: list[DraggableRectangle] = []
+        new_rects: List[DraggableRectangle] = []
 
         for data in self._clipboard:
             logical = data["coords"]
@@ -1403,13 +1403,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         # Group-based overlap avoidance: move all new rects together so their
         # relative layout is preserved.  Only check against pre-existing rects.
-        new_rect_ids: set[int] = {r.rect for r in new_rects}
-        existing_rect_ids: set[int] = {
+        new_rect_ids: Set[int] = {r.rect for r in new_rects}
+        existing_rect_ids: Set[int] = {
             obj.rect for obj in self.objects.values() if obj.rect not in new_rect_ids
         }
         off_x, off_y = self._PASTE_OVERLAP_OFFSET
 
-        for rep in range(self._PASTE_MAX_REPETITIONS):
+        for _rep in range(self._PASTE_MAX_REPETITIONS):
             collision = False
             for r in new_rects:
                 tl = r.get_topleft_pos()
@@ -1608,7 +1608,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         try:
             # Normalise saved keys to int once for all three steps
-            saved: dict[int, dict] = {
+            saved: Dict[int, Dict] = {
                 (int(k) if isinstance(k, str) else k): v for k, v in state["objects"].items()
             }
 
@@ -1819,7 +1819,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         for dead_id in dead_ids:
             self._tracked_images.pop(dead_id, None)
 
-    def _canvas_to_logical_coords(self, coords: list[float]) -> list[float]:
+    def _canvas_to_logical_coords(self, coords: List[float]) -> List[float]:
         """Convert canvas-space coordinates to zoom=1.0 logical coordinates.
 
         The affine relationship is:
@@ -1838,7 +1838,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         iz = 1.0 / z
         return [(coords[i] - (ox if i % 2 == 0 else oy)) * iz for i in range(len(coords))]
 
-    def _logical_to_canvas_coords(self, coords: list[float]) -> list[float]:
+    def _logical_to_canvas_coords(self, coords: List[float]) -> List[float]:
         """Convert zoom=1.0 logical coordinates to current canvas-space coordinates.
 
         Inverse of _canvas_to_logical_coords:
@@ -1894,7 +1894,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         for item_id in rect._attached_items:
             self.move(item_id, dx, dy)
 
-    def _snapshot_attached_items(self, rect: DraggableRectangle) -> list[dict[str, Any]]:
+    def _snapshot_attached_items(self, rect: DraggableRectangle) -> List[Dict[str, Any]]:
         """
         Capture metadata of all canvas items attached to a rectangle.
 
@@ -1908,12 +1908,12 @@ class InteractiveCanvas(ctk.CTkCanvas):
         Returns:
             List of snapshot dicts (empty if the rectangle has no attachments).
         """
-        snapshots: list[dict[str, Any]] = []
+        snapshots: List[Dict[str, Any]] = []
         for attached_id in rect._attached_items:
             try:
                 item_type = self.type(attached_id)
                 item_coords = self._canvas_to_logical_coords(list(self.coords(attached_id)))
-                snapshot: dict[str, Any] = {
+                snapshot: Dict[str, Any] = {
                     "type": item_type,
                     "coords": item_coords,
                 }
@@ -1932,7 +1932,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 pass  # Item may have been deleted externally
         return snapshots
 
-    def _recreate_attached_item(self, snapshot: dict[str, Any]) -> int | None:
+    def _recreate_attached_item(self, snapshot: Dict[str, Any]) -> Optional[int]:
         """
         Recreate a single canvas item from a snapshot dictionary.
 

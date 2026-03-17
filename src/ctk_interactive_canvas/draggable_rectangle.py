@@ -9,13 +9,12 @@ Author: Tchicdje Kouojip Joram Smith (DeltaGa)
 Enhanced: Dave Erickson
 """
 
-import logging
 import math
 import weakref
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from ._bindings import CanvasBindings, DEFAULT_BINDINGS
+from ._bindings import DEFAULT_BINDINGS, CanvasBindings
 from ._history import saves_history
 from ._keyboard import KeyboardStateManager
 from ._units import mm_to_px, px_to_mm
@@ -57,7 +56,7 @@ class DraggableRectangle:
         - Class methods for alignment and distribution
     """
 
-    _instances: list[weakref.ref] = []
+    _instances: List[weakref.ref] = []
     ALIGN_MODES = ["top", "middle", "bottom", "start", "center", "end"]
     DISTRIBUTE_MODES = ["horizontal", "vertical"]
 
@@ -99,7 +98,7 @@ class DraggableRectangle:
 
         # Canvas items attached to this rectangle (e.g. text labels) that move
         # with it during drags. Declared here so mypy always sees the attribute.
-        self._attached_items: list[int] = []
+        self._attached_items: List[int] = []
 
         self.rect = canvas.create_rectangle(x1, y1, x2, y2, width=width, **kwargs)
         self.resize_handle = canvas.create_aa_circle(x2, y2, radius=radius, fill="#00497b")
@@ -207,7 +206,7 @@ class DraggableRectangle:
         """
         return 4
 
-    def __getitem__(self, index: int | slice) -> float | list[float]:
+    def __getitem__(self, index: Union[int, slice]) -> Union[float, List[float]]:
         """
         Access coordinates by index or slice.
 
@@ -226,7 +225,7 @@ class DraggableRectangle:
             IndexError: If index is out of range.
         """
         coords_tuple = self.canvas.coords(self.rect)
-        coords: list[float] = [float(c) for c in coords_tuple]
+        coords: List[float] = [float(c) for c in coords_tuple]
         if isinstance(index, slice):
             return coords[index]
         if not isinstance(index, int):
@@ -273,7 +272,7 @@ class DraggableRectangle:
         """
         return iter(self.canvas.coords(self.rect))
 
-    def __contains__(self, point: list[float] | tuple[float, float]) -> bool:
+    def __contains__(self, point: Union[List[float], Tuple[float, float]]) -> bool:
         """
         Check if a point is inside the rectangle.
 
@@ -394,7 +393,7 @@ class DraggableRectangle:
         return hash(coords)
 
     @saves_history
-    def __add__(self, offset: list[float] | tuple[float, float]) -> "DraggableRectangle":
+    def __add__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
         Translate rectangle by offset (returns new rectangle).
 
@@ -424,7 +423,7 @@ class DraggableRectangle:
         )
         return new_rect
 
-    def __radd__(self, offset: list[float] | tuple[float, float]) -> "DraggableRectangle":
+    def __radd__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
         Right-hand addition (commutative).
 
@@ -436,7 +435,7 @@ class DraggableRectangle:
         """
         return self.__add__(offset)
 
-    def __sub__(self, offset: list[float] | tuple[float, float]) -> "DraggableRectangle":
+    def __sub__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
         Translate rectangle by negative offset (returns new rectangle).
 
@@ -456,7 +455,7 @@ class DraggableRectangle:
         return self.__add__([-dx, -dy])
 
     @saves_history
-    def __rsub__(self, offset: list[float] | tuple[float, float]) -> "DraggableRectangle":
+    def __rsub__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
         Right-hand subtraction (offset - rect).
 
@@ -487,7 +486,7 @@ class DraggableRectangle:
         return new_rect
 
     @saves_history
-    def __mul__(self, scalar: int | float) -> "DraggableRectangle":
+    def __mul__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
         Scale rectangle size from center (returns new rectangle).
 
@@ -526,7 +525,7 @@ class DraggableRectangle:
         )
         return new_rect
 
-    def __rmul__(self, scalar: int | float) -> "DraggableRectangle":
+    def __rmul__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
         Right-hand multiplication (commutative).
 
@@ -538,7 +537,7 @@ class DraggableRectangle:
         """
         return self.__mul__(scalar)
 
-    def __truediv__(self, scalar: int | float) -> "DraggableRectangle":
+    def __truediv__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
         Scale rectangle size down (divide) from center.
 
@@ -564,7 +563,7 @@ class DraggableRectangle:
 
         return self.__mul__(1 / scalar)
 
-    def __floordiv__(self, scalar: int | float) -> "DraggableRectangle":
+    def __floordiv__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
         Integer division scaling from center.
 
@@ -591,7 +590,7 @@ class DraggableRectangle:
         return self.__mul__(1 // scalar if isinstance(scalar, int) else int(1 / scalar))
 
     @saves_history
-    def __iadd__(self, offset: list[float] | tuple[float, float]) -> "DraggableRectangle":
+    def __iadd__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
         Translate rectangle in-place (modifies this rectangle).
 
@@ -612,7 +611,7 @@ class DraggableRectangle:
         self.canvas.move(self.resize_handle, dx, dy)
         return self
 
-    def __isub__(self, offset: list[float] | tuple[float, float]) -> "DraggableRectangle":
+    def __isub__(self, offset: Union[List[float], Tuple[float, float]]) -> "DraggableRectangle":
         """
         Translate rectangle in-place by negative offset.
 
@@ -632,7 +631,7 @@ class DraggableRectangle:
         return self.__iadd__([-dx, -dy])
 
     @saves_history
-    def __imul__(self, scalar: int | float) -> "DraggableRectangle":
+    def __imul__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
         Scale rectangle in-place from center.
 
@@ -669,7 +668,7 @@ class DraggableRectangle:
         self.canvas.coords(self.resize_handle, new_x1, new_y1)
         return self
 
-    def __itruediv__(self, scalar: int | float) -> "DraggableRectangle":
+    def __itruediv__(self, scalar: Union[int, float]) -> "DraggableRectangle":
         """
         Scale rectangle in-place (divide size).
 
@@ -851,10 +850,10 @@ class DraggableRectangle:
             canvas.save_state()
 
     @classmethod
-    def get_instances(cls) -> list["DraggableRectangle"]:
+    def get_instances(cls) -> List["DraggableRectangle"]:
         """Get all currently alive DraggableRectangle instances."""
-        alive: list["DraggableRectangle"] = []
-        new_refs: list[weakref.ref] = []
+        alive: List[DraggableRectangle] = []
+        new_refs: List[weakref.ref] = []
         for ref in cls._instances:
             obj = ref()
             if obj is not None:
@@ -865,10 +864,10 @@ class DraggableRectangle:
 
     def set_topleft_pos(
         self,
-        new_pos: list[float],
-        relative_pos: list[float] | None = None,
+        new_pos: List[float],
+        relative_pos: Optional[List[float]] = None,
         in_mm: bool = False,
-        dpi: int | None = None,
+        dpi: Optional[int] = None,
     ) -> None:
         """
         Set the top-left position of the rectangle.
@@ -904,10 +903,10 @@ class DraggableRectangle:
 
     def set_bottomright_pos(
         self,
-        new_pos: list[float],
-        relative_pos: list[float] | None = None,
+        new_pos: List[float],
+        relative_pos: Optional[List[float]] = None,
         in_mm: bool = False,
-        dpi: int | None = None,
+        dpi: Optional[int] = None,
     ) -> None:
         """
         Set the bottom-right position of the rectangle (resize operation).
@@ -936,7 +935,9 @@ class DraggableRectangle:
         self.canvas.coords(self.rect, x0, y0, new_pos[0], new_pos[1])
         self.canvas.coords(self.resize_handle, new_pos[0], new_pos[1])
 
-    def set_size(self, new_size: list[float], in_mm: bool = False, dpi: int | None = None) -> None:
+    def set_size(
+        self, new_size: List[float], in_mm: bool = False, dpi: Optional[int] = None
+    ) -> None:
         """
         Set the size of the rectangle.
 
@@ -962,10 +963,10 @@ class DraggableRectangle:
 
     def get_topleft_pos(
         self,
-        relative_pos: list[float] | None = None,
+        relative_pos: Optional[List[float]] = None,
         in_mm: bool = False,
-        dpi: int | None = None,
-    ) -> list[float]:
+        dpi: Optional[int] = None,
+    ) -> List[float]:
         """
         Get the top-left position of the rectangle.
 
@@ -999,10 +1000,10 @@ class DraggableRectangle:
 
     def get_bottomright_pos(
         self,
-        relative_pos: list[float] | None = None,
+        relative_pos: Optional[List[float]] = None,
         in_mm: bool = False,
-        dpi: int | None = None,
-    ) -> list[float]:
+        dpi: Optional[int] = None,
+    ) -> List[float]:
         """
         Get the bottom-right position of the rectangle.
 
@@ -1034,7 +1035,7 @@ class DraggableRectangle:
 
         return [x1, y1]
 
-    def get_size(self, in_mm: bool = False, dpi: int | None = None) -> list[float]:
+    def get_size(self, in_mm: bool = False, dpi: Optional[int] = None) -> List[float]:
         """
         Get the size of the rectangle.
 
@@ -1116,9 +1117,9 @@ class DraggableRectangle:
     @saves_history
     def align(
         cls,
-        rectangles: list["DraggableRectangle"],
+        rectangles: List["DraggableRectangle"],
         mode: str,
-        relative_pos: list[float] | None = None,
+        relative_pos: Optional[List[float]] = None,
     ) -> None:
         """
         Align multiple rectangles relative to the first rectangle.
@@ -1170,9 +1171,9 @@ class DraggableRectangle:
     @saves_history
     def distribute(
         cls,
-        rectangles: list["DraggableRectangle"],
+        rectangles: List["DraggableRectangle"],
         mode: str,
-        relative_pos: list[float] | None = None,
+        relative_pos: Optional[List[float]] = None,
     ) -> None:
         """
         Distribute multiple rectangles evenly with equal spacing.
@@ -1228,7 +1229,7 @@ class DraggableRectangle:
                 rect.set_topleft_pos([current_x, y], relative_pos=[ox, oy])
                 y += (rc[3] - rc[1]) + space_between
 
-    def copy_(self, offset: list[float] | None = None, **kwargs: Any) -> "DraggableRectangle":
+    def copy_(self, offset: Optional[List[float]] = None, **kwargs: Any) -> "DraggableRectangle":
         """
         Create a copy of this rectangle at an offset position.
 
@@ -1272,7 +1273,7 @@ class DraggableRectangle:
         )
 
     @classmethod
-    def compare(cls, rect1: "DraggableRectangle", rect2: "DraggableRectangle") -> tuple[bool, dict]:
+    def compare(cls, rect1: "DraggableRectangle", rect2: "DraggableRectangle") -> Tuple[bool, Dict]:
         """
         Compare two rectangles for equality with detailed information.
 
@@ -1474,7 +1475,7 @@ class DraggableRectangle:
         if hasattr(self.canvas, "_on_objects_changed"):
             self.canvas._on_objects_changed()
 
-    def convert_mm_to_px(self, millimeters: float, dpi: int | None = None) -> int:
+    def convert_mm_to_px(self, millimeters: float, dpi: Optional[int] = None) -> int:
         """
         Convert millimeters to pixels using DPI.
 
@@ -1490,7 +1491,7 @@ class DraggableRectangle:
         """
         return mm_to_px(millimeters, dpi if dpi is not None else self.dpi)
 
-    def convert_px_to_mm(self, pixels: float, dpi: int | None = None) -> float:
+    def convert_px_to_mm(self, pixels: float, dpi: Optional[int] = None) -> float:
         """
         Convert pixels to millimeters using DPI.
 
