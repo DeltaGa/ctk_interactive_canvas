@@ -9,9 +9,18 @@ Author: Tchicdje Kouojip Joram Smith (DeltaGa)
 License: MIT
 """
 
+from ._bindings import CanvasBindings
+from ._history import saves_history
+from ._keyboard import KeyboardStateManager
+from .draggable_rectangle import DraggableRectangle
 from .interactive_canvas import InteractiveCanvas
-from .draggable_rectangle import DraggableRectangle, KeyboardStateManager, saves_history
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 __author__ = "Tchicdje Kouojip Joram Smith (DeltaGa)"
-__all__ = ["InteractiveCanvas", "DraggableRectangle", "KeyboardStateManager", "saves_history"]
+__all__ = [
+    "InteractiveCanvas",
+    "DraggableRectangle",
+    "KeyboardStateManager",
+    "saves_history",
+    "CanvasBindings",
+]

@@ -15,11 +15,15 @@ Features:
 Dependencies: customtkinter, Pillow
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import customtkinter as ctk
 from ctk_interactive_canvas import InteractiveCanvas, DraggableRectangle
 import json
 from typing import Dict, List, Tuple, Optional
-from pathlib import Path
 
 try:
     from PIL import Image as PILImage, ImageTk

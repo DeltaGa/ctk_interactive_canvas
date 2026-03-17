@@ -8,6 +8,11 @@ Demonstrates:
 - Using class methods for batch operations
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import customtkinter as ctk
 import random
 from ctk_interactive_canvas import DraggableRectangle, InteractiveCanvas
