@@ -15,11 +15,15 @@ Features:
 Dependencies: customtkinter
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import customtkinter as ctk
 from ctk_interactive_canvas import InteractiveCanvas, DraggableRectangle
 import json
 from typing import Dict, List, Tuple, Optional
-from pathlib import Path
 
 TABLE_TYPES = {
     "Round 8": {"width": 60, "height": 60, "seats": 8, "shape": "circle"},

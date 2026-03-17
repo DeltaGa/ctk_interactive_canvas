@@ -152,3 +152,4 @@ temp/
 tmp/
 .ruff_cache/
 .claude
+CLAUDE.md

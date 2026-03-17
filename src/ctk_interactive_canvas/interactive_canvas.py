@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import customtkinter as ctk
 
+from ._bindings import CanvasBindings
 from .draggable_rectangle import DraggableRectangle
 
 
@@ -79,6 +80,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
             "move_attached_items",
             "undo",
             "redo",
+            "copy",
+            "cut",
+            "paste",
+            "duplicate",
             # Rectangle-level hooks (dispatched via _dispatch_rect)
             "rect_on_click",
             "rect_on_drag",
@@ -100,6 +105,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
         create_bindings: bool = True,
         enable_history: bool = True,
         enable_zoom: bool = True,
+        bindings: CanvasBindings | None = None,
+        max_history: int = 50,
+        min_zoom: float = 0.1,
+        max_zoom: float = 10.0,
         **kwargs: Any,
     ) -> None:
         """
@@ -116,6 +125,15 @@ class InteractiveCanvas(ctk.CTkCanvas):
             create_bindings: Whether to create default mouse/keyboard bindings
             enable_history: Enable undo/redo functionality (default: True)
             enable_zoom: Enable zoom functionality (default: True)
+            bindings: Custom event binding strings.  Pass a ``CanvasBindings``
+                instance to remap any keyboard or mouse sequence without
+                subclassing.  Defaults to ``CanvasBindings()`` (standard bindings).
+            max_history: Maximum number of undo/redo snapshots to retain (default: 50).
+                Only used when ``enable_history=True``.
+            min_zoom: Minimum allowed zoom level (default: 0.1).
+                Only used when ``enable_zoom=True``.
+            max_zoom: Maximum allowed zoom level (default: 10.0).
+                Only used when ``enable_zoom=True``.
             **kwargs: Additional arguments passed to CTkCanvas
         """
         super().__init__(master, **kwargs)
@@ -158,13 +176,22 @@ class InteractiveCanvas(ctk.CTkCanvas):
         # Dynamic callback registry: {hook_name: {mode: [(callable, suppress_during_restore)]}}
         self._callbacks: dict[str, dict[str, list[tuple[Callable, bool]]]] = {}
 
+        # Clipboard — internal snapshot list for copy/cut/paste/duplicate.
+        # Each entry mirrors the save_state() per-object format.
+        self._clipboard: list[dict] = []
+
         self.enable_history = enable_history
         self.enable_zoom = enable_zoom
+
+        # Binding strings: custom instance or the default set.
+        # Stored before _create_bindings() so DraggableRectangle.__init__
+        # can read canvas._bindings via getattr.
+        self._bindings: CanvasBindings = bindings if bindings is not None else CanvasBindings()
 
         if self.enable_history:
             self.history_states: list[dict] = []
             self.history_index: int = -1
-            self.max_history: int = 50
+            self.max_history: int = max_history
             # Save the initial empty state so undo can return to empty canvas
             self._save_initial_state()
 
@@ -176,8 +203,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self._canvas_origin_y: float = 0.0
 
         if self.enable_zoom:
-            self.min_zoom: float = 0.1
-            self.max_zoom: float = 10.0
+            self.min_zoom: float = min_zoom
+            self.max_zoom: float = max_zoom
             self._tracked_images: dict[int, dict] = {}
 
         if create_bindings:
@@ -202,10 +229,21 @@ class InteractiveCanvas(ctk.CTkCanvas):
             callback: Callable to invoke.  Rectangle-level hooks (``rect_on_*``)
                 receive the ``DraggableRectangle`` as their first argument.
             mode: One of:
-                * ``"before"``  — called *before* the built-in logic.
-                * ``"after"``   — called *after* the built-in logic (default).
-                * ``"inplace"`` — *replaces* the built-in logic entirely.
+                * ``"before"``        — called *before* the built-in logic.
+                * ``"after"``         — called *after* the built-in logic (default).
+                * ``"inplace"``       — *replaces* the built-in logic entirely.
                   Only the first registered inplace callback is used.
+                * ``"after_result"``  — called *after* the built-in logic with
+                  ``result`` prepended as the first positional argument.  Use
+                  this mode when you need the operation's return value —
+                  e.g. the newly created ``DraggableRectangle`` list from
+                  ``paste`` / ``duplicate`` / ``copy``, the deleted rect from
+                  ``delete_draggable_rectangle``, or the created rect from
+                  ``create_draggable_rectangle``.  Signature::
+
+                      def on_paste(result, *args, **kwargs): ...
+                      canvas.register_callback("paste", on_paste, mode="after_result")
+
             suppress_during_restore: If ``True``, this callback is silenced
                 while undo/redo state restoration is in progress.
 
@@ -216,8 +254,11 @@ class InteractiveCanvas(ctk.CTkCanvas):
             raise ValueError(
                 f"Unknown hook: {hook_name!r}. " f"Valid hooks: {sorted(self._HOOKABLE_METHODS)}"
             )
-        if mode not in ("before", "after", "inplace"):
-            raise ValueError(f"Invalid mode: {mode!r}. Must be 'before', 'after', or 'inplace'.")
+        if mode not in ("before", "after", "inplace", "after_result"):
+            raise ValueError(
+                f"Invalid mode: {mode!r}. "
+                "Must be 'before', 'after', 'inplace', or 'after_result'."
+            )
         if hook_name not in self._callbacks:
             self._callbacks[hook_name] = {}
         hook_dict = self._callbacks[hook_name]
@@ -301,6 +342,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
             if not (suppress and restoring):
                 cb(*args, **kwargs)
 
+        for cb, suppress in hooks.get("after_result", ()):
+            if not (suppress and restoring):
+                cb(result, *args, **kwargs)
+
         return result
 
     def _dispatch_rect(
@@ -353,6 +398,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
             if not (suppress and restoring):
                 cb(rect, *args, **kwargs)
 
+        for cb, suppress in hooks.get("after_result", ()):
+            if not (suppress and restoring):
+                cb(result, rect, *args, **kwargs)
+
         return result
 
     # -------------------------------------------------------------------------
@@ -397,35 +446,45 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def _create_bindings(self) -> None:
         """Create default mouse and keyboard bindings."""
-        self.bind("<Button-1>", self.on_click)
-        self.bind("<B1-Motion>", self.on_drag_select)
-        self.bind("<ButtonRelease-1>", self.on_drag_release)
-        self.bind("<ButtonPress-2>", self.on_middle_click)
-        self.bind("<B2-Motion>", self.on_middle_drag)
-        self.bind("<ButtonRelease-2>", self.on_middle_release)
-        self.bind_all("<KeyPress-space>", self.on_space_press)
-        self.bind_all("<KeyRelease-space>", self.on_space_release)
+        b = self._bindings
+        self.bind(b.mouse_left_click, self.on_click)
+        self.bind(b.mouse_left_drag, self.on_drag_select)
+        self.bind(b.mouse_left_release, self.on_drag_release)
+        self.bind(b.mouse_middle_click, self.on_middle_click)
+        self.bind(b.mouse_middle_drag, self.on_middle_drag)
+        self.bind(b.mouse_middle_release, self.on_middle_release)
+        self.bind_all(b.space_press, self.on_space_press)
+        self.bind_all(b.space_release, self.on_space_release)
 
         # Always bind Delete to our internal handler, which properly
         # dispatches to the user's callback (handling event-arg mismatch)
         # or to the default on_delete.
-        self.bind_all("<Delete>", self._on_delete_key)
+        self.bind_all(b.delete_key, self._on_delete_key)
 
         if self.enable_history:
-            self.bind_all("<Control-z>", lambda e: self.undo())
-            self.bind_all("<Control-Z>", lambda e: self.undo())
-            self.bind_all("<Control-y>", lambda e: self.redo())
-            self.bind_all("<Control-Y>", lambda e: self.redo())
-            self.bind_all("<Control-Shift-z>", lambda e: self.redo())
-            self.bind_all("<Control-Shift-Z>", lambda e: self.redo())
+            self.bind_all(b.undo, lambda e: self.undo())
+            self.bind_all(b.undo_upper, lambda e: self.undo())
+            self.bind_all(b.redo_y, lambda e: self.redo())
+            self.bind_all(b.redo_y_upper, lambda e: self.redo())
+            self.bind_all(b.redo_shift_z, lambda e: self.redo())
+            self.bind_all(b.redo_shift_z_upper, lambda e: self.redo())
 
         if self.enable_zoom:
-            self.bind_all("<plus>", lambda e: self.zoom_in())
-            self.bind_all("<equal>", lambda e: self.zoom_in())
-            self.bind_all("<minus>", lambda e: self.zoom_out())
-            self.bind("<Alt-MouseWheel>", self.on_zoom_wheel)
-            self.bind("<Alt-Button-4>", lambda e: self.zoom_in())
-            self.bind("<Alt-Button-5>", lambda e: self.zoom_out())
+            self.bind_all(b.zoom_in_plus, lambda e: self.zoom_in())
+            self.bind_all(b.zoom_in_equal, lambda e: self.zoom_in())
+            self.bind_all(b.zoom_out_minus, lambda e: self.zoom_out())
+            self.bind(b.zoom_wheel, self.on_zoom_wheel)
+            self.bind(b.zoom_wheel_up, lambda e: self.zoom_in())
+            self.bind(b.zoom_wheel_down, lambda e: self.zoom_out())
+
+        self.bind_all(b.copy, lambda e: self.copy())
+        self.bind_all(b.copy_upper, lambda e: self.copy())
+        self.bind_all(b.cut, lambda e: self.cut())
+        self.bind_all(b.cut_upper, lambda e: self.cut())
+        self.bind_all(b.paste, lambda e: self.paste())
+        self.bind_all(b.paste_upper, lambda e: self.paste())
+        self.bind_all(b.duplicate, lambda e: self.duplicate())
+        self.bind_all(b.duplicate_upper, lambda e: self.duplicate())
 
     def _register_rectangle(self, rect: DraggableRectangle) -> None:
         """
@@ -583,32 +642,27 @@ class InteractiveCanvas(ctk.CTkCanvas):
             y2 = center_y + rect_height / 2
 
         draggable_rect = DraggableRectangle(self, x1, y1, x2, y2, **kwargs)
+
+        # Build a set of existing rect canvas IDs once — O(n) upfront so the
+        # inner check per repetition is O(|overlapping_items|) via set intersection.
+        existing_rect_ids: set[int] = {
+            obj.rect for obj in self.objects.values() if obj is not draggable_rect
+        }
         repetitions = 0
 
         while repetitions < max_repetitions:
             topleft_pos = draggable_rect.get_topleft_pos()
-            overlap = False
             overlapping_items = self.find_overlapping(
                 topleft_pos[0] - 2, topleft_pos[1] - 2, topleft_pos[0] + 2, topleft_pos[1] + 2
             )
 
-            if overlapping_items:
-                for obj in self.objects.values():
-                    # Exclude the newly created rectangle from overlap detection
-                    if obj is draggable_rect:
-                        continue
-                    if obj.rect in overlapping_items:
-                        new_pos = [
-                            x1 + offset[0] * (repetitions + 1),
-                            y1 + offset[1] * (repetitions + 1),
-                        ]
-                        draggable_rect.set_topleft_pos(new_pos)
-                        overlap = True
-                        break
-
-            if not overlap:
+            if not (set(overlapping_items) & existing_rect_ids):
                 break
+
             repetitions += 1
+            draggable_rect.set_topleft_pos(
+                [x1 + offset[0] * repetitions, y1 + offset[1] * repetitions]
+            )
 
         if self.enable_history:
             self.save_state()
@@ -657,54 +711,64 @@ class InteractiveCanvas(ctk.CTkCanvas):
             offset = [21, 21]
 
         new_draggable_rect = draggable_rect.copy_(**kwargs)
+
+        # Exclude the new copy itself from overlap detection.
+        existing_rect_ids: set[int] = {
+            obj.rect for obj in self.objects.values() if obj is not new_draggable_rect
+        }
+        origin = new_draggable_rect.get_topleft_pos()
         repetitions = 0
 
         while repetitions < max_repetitions:
             topleft_pos = new_draggable_rect.get_topleft_pos()
-            overlap = False
             overlapping_items = self.find_overlapping(
                 topleft_pos[0] - 2, topleft_pos[1] - 2, topleft_pos[0] + 2, topleft_pos[1] + 2
             )
 
-            if overlapping_items:
-                for obj in self.objects.values():
-                    if obj.rect in overlapping_items:
-                        new_pos = [
-                            topleft_pos[0] + offset[0] * (repetitions + 1),
-                            topleft_pos[1] + offset[1] * (repetitions + 1),
-                        ]
-                        new_draggable_rect.set_topleft_pos(new_pos)
-                        overlap = True
-                        break
-
-            if not overlap:
+            if not (set(overlapping_items) & existing_rect_ids):
                 break
+
             repetitions += 1
+            new_draggable_rect.set_topleft_pos(
+                [origin[0] + offset[0] * repetitions, origin[1] + offset[1] * repetitions]
+            )
 
         if self.enable_history:
             self.save_state()
 
         return new_draggable_rect
 
-    def delete_draggable_rectangle(self, item_id: int) -> None:
+    def delete_draggable_rectangle(self, item_id: int) -> "DraggableRectangle | None":
         """
         Delete a draggable rectangle by its ID.
 
         Cleans up attached items (text labels, etc.), removes from
         tracking dictionaries, and optionally saves history state.
 
+        Returns the deleted ``DraggableRectangle`` object (canvas items already
+        removed), or ``None`` if ``item_id`` was not found.  Use an
+        ``after_result`` hook to recover the reference::
+
+            canvas.register_callback(
+                "delete_draggable_rectangle", fn, mode="after_result"
+            )
+            # fn(deleted_rect_or_none, item_id)
+
         Args:
             item_id: The ID of the rectangle to delete
         """
-        self._dispatch(
-            "delete_draggable_rectangle",
-            self._builtin_delete_draggable_rectangle,
-            item_id,
+        return cast(
+            "DraggableRectangle | None",
+            self._dispatch(
+                "delete_draggable_rectangle",
+                self._builtin_delete_draggable_rectangle,
+                item_id,
+            ),
         )
 
-    def _builtin_delete_draggable_rectangle(self, item_id: int) -> None:
+    def _builtin_delete_draggable_rectangle(self, item_id: int) -> "DraggableRectangle | None":
         if item_id not in self.objects:
-            return
+            return None
 
         obj = self.objects[item_id]
 
@@ -724,6 +788,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
         # Only fire user callbacks when not restoring state internally
         if not self._restoring_state:
             self.deselect_callback()
+
+        return obj
 
     def _delete_attached_items(self, rect: DraggableRectangle) -> None:
         """
@@ -1130,6 +1196,242 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self.history_index += 1
             self._restore_state(self.history_states[self.history_index])
 
+    # -------------------------------------------------------------------------
+    # Clipboard — copy / cut / paste / duplicate
+    # -------------------------------------------------------------------------
+
+    def copy(self) -> list["DraggableRectangle"]:
+        """
+        Copy the current selection to the internal clipboard.
+
+        Snapshots all visual properties (geometry, colours, line width, handle
+        radius, DPI, attached items) of every selected rectangle in logical
+        (zoom=1.0) coordinates so the snapshot is zoom-invariant.
+
+        Returns the source rectangles (same Python objects, not copies).
+        Register an ``after_result`` hook to receive them::
+
+            canvas.register_callback("copy", fn, mode="after_result")
+            # fn(copied_rects: list[DraggableRectangle])
+        """
+        return cast(
+            "list[DraggableRectangle]",
+            self._dispatch("copy", self._builtin_copy),
+        )
+
+    def _builtin_copy(self) -> "list[DraggableRectangle]":
+        if not self.selected_objects:
+            return []
+        rects = list(self.selected_objects.values())
+        self._clipboard = [
+            {
+                "coords": self._canvas_to_logical_coords(list(self.coords(obj.rect))),
+                "outline": obj.original_outline,
+                "fill": obj.fill_color,
+                "line_width": obj.line_width,
+                "handle_radius": obj.handle_radius,
+                "dpi": obj.dpi,
+                "attached_items": self._snapshot_attached_items(obj),
+            }
+            for obj in rects
+        ]
+        return rects
+
+    def cut(self) -> "list[DraggableRectangle]":
+        """
+        Cut the current selection: copy to clipboard then delete.
+
+        Saves a history snapshot after deletion so the cut is undoable.
+
+        Returns the removed rectangles (canvas items already deleted; the
+        Python objects remain alive via the history stack's ``rect_ref``).
+        Register an ``after_result`` hook to receive them::
+
+            canvas.register_callback("cut", fn, mode="after_result")
+            # fn(cut_rects: list[DraggableRectangle])
+        """
+        return cast(
+            "list[DraggableRectangle]",
+            self._dispatch("cut", self._builtin_cut),
+        )
+
+    def _builtin_cut(self) -> "list[DraggableRectangle]":
+        if not self.selected_objects:
+            return []
+        rects = self._builtin_copy()
+        for item_id in list(self.selected_objects):
+            self.delete_draggable_rectangle(item_id)
+        if self.enable_history:
+            self.save_state()
+        return rects
+
+    def paste(self) -> "list[DraggableRectangle]":
+        """
+        Paste clipboard contents, **centered on the current view**.
+
+        Unlike ``duplicate()``, paste always moves the new elements so their
+        collective bounding-box center coincides with the visible canvas center,
+        regardless of where the originals were.  This mirrors the behaviour of
+        Adobe Illustrator's Ctrl+V.
+
+        The previous selection is cleared; pasted rectangles are selected
+        automatically.  A history snapshot is saved.
+
+        Returns the newly created rectangles.
+        Register an ``after_result`` hook to receive them::
+
+            canvas.register_callback("paste", fn, mode="after_result")
+            # fn(pasted_rects: list[DraggableRectangle])
+        """
+        return cast(
+            "list[DraggableRectangle]",
+            self._dispatch("paste", self._builtin_paste),
+        )
+
+    def _builtin_paste(self) -> "list[DraggableRectangle]":
+        if not self._clipboard:
+            return []
+        return self._paste_impl(center_on_view=True)
+
+    def duplicate(self) -> "list[DraggableRectangle]":
+        """
+        Duplicate the current selection in-place (Ctrl+D).
+
+        Unlike ``paste()``, duplicate starts each new element at the same
+        position as its source.  Overlap avoidance then shifts the group
+        incrementally (21 px steps) until no top-left corner collides with an
+        existing rectangle, up to 20 attempts.  The originals remain unchanged;
+        duplicates are selected automatically.  A history snapshot is saved.
+
+        Returns the newly created rectangles.
+        Register an ``after_result`` hook to receive them::
+
+            canvas.register_callback("duplicate", fn, mode="after_result")
+            # fn(duplicated_rects: list[DraggableRectangle])
+        """
+        return cast(
+            "list[DraggableRectangle]",
+            self._dispatch("duplicate", self._builtin_duplicate),
+        )
+
+    def _builtin_duplicate(self) -> "list[DraggableRectangle]":
+        if not self.selected_objects:
+            return []
+        self._builtin_copy()
+        return self._paste_impl(center_on_view=False)
+
+    # Overlap avoidance constants used by _paste_impl (match _builtin_create defaults).
+    _PASTE_OVERLAP_OFFSET: tuple[int, int] = (21, 21)
+    _PASTE_MAX_REPETITIONS: int = 20
+
+    def _paste_impl(self, center_on_view: bool = True) -> "list[DraggableRectangle]":
+        """
+        Shared placement engine for paste() and duplicate().
+
+        paste (center_on_view=True):
+            Shifts the whole clipboard group so its bounding-box center lands
+            on the visible view center, then runs group-based overlap avoidance.
+
+        duplicate (center_on_view=False):
+            Places each new rect at the source position (dx=dy=0), then runs
+            group-based overlap avoidance.
+
+        Overlap avoidance moves the *entire* group together in 21 px steps so
+        the relative layout of a multi-rect clipboard is always preserved.
+        Up to ``_PASTE_MAX_REPETITIONS`` attempts are made; if all are
+        exhausted the final position is kept regardless.
+
+        Returns:
+            Newly created DraggableRectangle instances, already selected.
+        """
+        if not self._clipboard:
+            return []
+
+        if center_on_view:
+            all_coords = [data["coords"] for data in self._clipboard]
+            min_lx = min(c[0] for c in all_coords)
+            min_ly = min(c[1] for c in all_coords)
+            max_lx = max(c[2] for c in all_coords)
+            max_ly = max(c[3] for c in all_coords)
+            clip_cx = (min_lx + max_lx) / 2.0
+            clip_cy = (min_ly + max_ly) / 2.0
+            # get_view_center() returns canvas-space; convert to logical space
+            view_logical = self._canvas_to_logical_coords(self.get_view_center())
+            dx = view_logical[0] - clip_cx
+            dy = view_logical[1] - clip_cy
+        else:
+            dx = 0.0
+            dy = 0.0
+
+        self._builtin_deselect_all()
+        new_rects: list[DraggableRectangle] = []
+
+        for data in self._clipboard:
+            logical = data["coords"]
+            pasted_logical = [
+                logical[0] + dx,
+                logical[1] + dy,
+                logical[2] + dx,
+                logical[3] + dy,
+            ]
+            canvas_coords = self._logical_to_canvas_coords(pasted_logical)
+            rect = DraggableRectangle(
+                self,
+                canvas_coords[0],
+                canvas_coords[1],
+                canvas_coords[2],
+                canvas_coords[3],
+                outline=data["outline"],
+                fill=data["fill"],
+                width=data["line_width"],
+                radius=data["handle_radius"],
+                dpi=data["dpi"],
+            )
+            for snapshot in data["attached_items"]:
+                snap_logical = snapshot["coords"]
+                pasted_snap_logical = [
+                    c + (dx if i % 2 == 0 else dy) for i, c in enumerate(snap_logical)
+                ]
+                canvas_snapshot = {
+                    **snapshot,
+                    "coords": self._logical_to_canvas_coords(pasted_snap_logical),
+                }
+                new_id = self._recreate_attached_item(canvas_snapshot)
+                if new_id is not None:
+                    rect._attached_items.append(new_id)
+            new_rects.append(rect)
+
+        # Group-based overlap avoidance: move all new rects together so their
+        # relative layout is preserved.  Only check against pre-existing rects.
+        new_rect_ids: set[int] = {r.rect for r in new_rects}
+        existing_rect_ids: set[int] = {
+            obj.rect for obj in self.objects.values() if obj.rect not in new_rect_ids
+        }
+        off_x, off_y = self._PASTE_OVERLAP_OFFSET
+
+        for rep in range(self._PASTE_MAX_REPETITIONS):
+            collision = False
+            for r in new_rects:
+                tl = r.get_topleft_pos()
+                overlapping = self.find_overlapping(tl[0] - 2, tl[1] - 2, tl[0] + 2, tl[1] + 2)
+                if set(overlapping) & existing_rect_ids:
+                    collision = True
+                    break
+            if not collision:
+                break
+            # Shift the whole group by one offset step (cumulative across iterations)
+            for r in new_rects:
+                tl = r.get_topleft_pos()
+                r.set_topleft_pos([tl[0] + off_x, tl[1] + off_y])
+
+        for r in new_rects:
+            self.select_item(self._rect_to_id[id(r)])
+
+        if self.enable_history:
+            self.save_state()
+
+        return new_rects
+
     def _update_rect_in_place(self, rect: "DraggableRectangle", data: dict) -> None:
         """
         Mutate an existing DraggableRectangle to match a saved state snapshot.
@@ -1241,12 +1543,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
         )
 
         # Re-bind all mouse interaction events to the new canvas item IDs
-        self.tag_bind(rect.rect, "<Button-1>", rect.on_click)
-        self.tag_bind(rect.rect, "<B1-Motion>", rect.on_drag)
-        self.tag_bind(rect.rect, "<ButtonRelease-1>", rect._on_drag_end)
-        self.tag_bind(rect.resize_handle, "<Button-1>", rect.on_resize_click)
-        self.tag_bind(rect.resize_handle, "<B1-Motion>", rect.on_resize_drag)
-        self.tag_bind(rect.resize_handle, "<ButtonRelease-1>", rect._on_resize_end)
+        b = self._bindings
+        self.tag_bind(rect.rect, b.mouse_left_click, rect.on_click)
+        self.tag_bind(rect.rect, b.mouse_left_drag, rect.on_drag)
+        self.tag_bind(rect.rect, b.mouse_left_release, rect._on_drag_end)
+        self.tag_bind(rect.resize_handle, b.mouse_left_click, rect.on_resize_click)
+        self.tag_bind(rect.resize_handle, b.mouse_left_drag, rect.on_resize_drag)
+        self.tag_bind(rect.resize_handle, b.mouse_left_release, rect._on_resize_end)
 
         # Sync Python-side attribute state from the snapshot
         rect.original_outline = outline
