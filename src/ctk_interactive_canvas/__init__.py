@@ -9,6 +9,7 @@ License: MIT
 """
 
 from ._bindings import CanvasBindings
+from ._grid import VALID_LINESTYLES, CanvasGrid, GridSnap
 from ._history import saves_history
 from ._keyboard import KeyboardStateManager
 from .draggable_rectangle import DraggableRectangle
@@ -17,9 +18,12 @@ from .interactive_canvas import InteractiveCanvas
 __version__ = "0.9.0"
 __author__ = "Tchicdje Kouojip Joram Smith (DeltaGa)"
 __all__ = [
-    "InteractiveCanvas",
+    "VALID_LINESTYLES",
+    "CanvasBindings",
+    "CanvasGrid",
     "DraggableRectangle",
+    "GridSnap",
+    "InteractiveCanvas",
     "KeyboardStateManager",
     "saves_history",
-    "CanvasBindings",
 ]

@@ -17,6 +17,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union, cast
 import customtkinter as ctk
 
 from ._bindings import CanvasBindings
+from ._grid import CanvasGrid
 from .draggable_rectangle import DraggableRectangle
 
 
@@ -1991,3 +1992,42 @@ class InteractiveCanvas(ctk.CTkCanvas):
                 ),
             )
         return None
+
+    # -------------------------------------------------------------------------
+    # Grid overlay
+    # -------------------------------------------------------------------------
+
+    def add_grid(self, **kwargs: Any) -> CanvasGrid:
+        """Create and attach an adaptive :class:`~ctk_interactive_canvas.CanvasGrid`.
+
+        The returned grid is fully self-managing — it registers its own zoom /
+        pan callbacks and redraws itself via ``after_idle`` whenever the view
+        changes.  Call :meth:`~ctk_interactive_canvas.CanvasGrid.destroy` on
+        the returned object to detach it.
+
+        All keyword arguments are forwarded verbatim to
+        :class:`~ctk_interactive_canvas.CanvasGrid`.  Common options::
+
+            canvas.add_grid(spacing=50)
+            canvas.add_grid(
+                spacing=100,
+                color="#888888",
+                alpha=0.6,
+                linestyle="--",
+                subdivisions=4,
+                show_origin=True,
+            )
+
+        Grid magnetism (snap-to-grid during drag and resize) is enabled by
+        passing ``snap=True``::
+
+            grid = canvas.add_grid(spacing=50, snap=True)
+            # Reconfigure later:
+            grid.snap.configure(snap_ratio=0.25, snap_y=False)
+            grid.disable_snap()
+            grid.enable_snap()
+
+        Returns:
+            The newly created :class:`~ctk_interactive_canvas.CanvasGrid` instance.
+        """
+        return CanvasGrid(self, **kwargs)

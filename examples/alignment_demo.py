@@ -26,6 +26,10 @@ def main():
     canvas = InteractiveCanvas(root, width=900, height=600, bg="white")
     canvas.pack(pady=10)
 
+    canvas.add_grid(
+        spacing=50, color="#cccccc", subdivisions=5, minor_linestyle=":", snap=True, snap_ratio=0.25
+    )
+
     rectangles = []
     for i in range(5):
         rect = canvas.create_draggable_rectangle(
