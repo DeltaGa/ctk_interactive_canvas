@@ -1,11 +1,11 @@
-"""CanvasGrid — adaptive, matplotlib-style virtual grid for InteractiveCanvas.
+"""CanvasGrid - adaptive, matplotlib-style virtual grid for InteractiveCanvas.
 
 Virtual-grid design
 -------------------
 Lines are never subjected to ``canvas.scale()`` and never stored as persistent
 canvas items.  On every view-state change (zoom, pan, resize) the entire grid
 is deleted via a single ``canvas.delete(tag)`` call (O(1) in Tk's C layer) and
-redrawn from the current logical→canvas coordinate transform.  The grid can
+redrawn from the current logical->canvas coordinate transform.  The grid can
 therefore never drift, merge, or vanish regardless of zoom level or pan offset.
 
 Adaptive spacing
@@ -22,7 +22,7 @@ Performance
   collapse into a single redraw per Tk event-loop frame.  The
   ``_pending_redraw`` boolean flag prevents duplicate ``after_idle`` enqueues.
 - Hot-loop locals: ``canvas.create_line`` is bound once per ``_draw_grid_lines``
-  call; ``zoom``, ``ox``, ``oy`` are read once and used inline — no repeated
+  call; ``zoom``, ``ox``, ``oy`` are read once and used inline - no repeated
   attribute lookups inside the sweep loops.
 - No dict unpacking overhead: ``**common_kw`` is built once per layer.
 
@@ -57,7 +57,7 @@ _TAG_MAJOR: str = "_ctk_grid_major"
 _TAG_MINOR: str = "_ctk_grid_minor"
 
 #: Maps matplotlib-style linestyle shorthand to tkinter dash tuples.
-#: The empty tuple is the "solid" sentinel — ``dash`` is omitted from the
+#: The empty tuple is the "solid" sentinel - ``dash`` is omitted from the
 #: ``create_line`` call entirely when this value is chosen.
 _DASH_MAP: dict[str, tuple[int, ...]] = {
     "-": (),
@@ -66,14 +66,14 @@ _DASH_MAP: dict[str, tuple[int, ...]] = {
     "-.": (8, 4, 2, 4),
 }
 
-#: Frozenset of valid linestyle strings — exposed publicly for validation.
+#: Frozenset of valid linestyle strings - exposed publicly for validation.
 VALID_LINESTYLES: frozenset[str] = frozenset(_DASH_MAP)
 
 #: Hard cap on lines drawn per axis per layer per frame.
 #: Prevents pathological rendering if adaptive spacing fails to converge.
 _MAX_LINES_PER_AXIS: int = 500
 
-#: Maximum adaptive-spacing iteration count (log₂ safety bound).
+#: Maximum adaptive-spacing iteration count (log2 safety bound).
 _MAX_ADAPT_ITERS: int = 64
 
 #: Default adaptive-spacing limits used by standalone GridSnap instances.
@@ -87,7 +87,7 @@ _SNAP_RATIO_MAX: float = 0.5
 _HEX_SHORT: int = 3
 _HEX_LONG: int = 6
 
-# Simple configure() parameter → private attribute name mapping.
+# Simple configure() parameter -> private attribute name mapping.
 _SIMPLE_PARAMS: dict[str, str] = {
     "color": "_color",
     "alpha": "_alpha",
@@ -146,7 +146,7 @@ def _parse_hex_rgb(hex_color: str) -> Optional[tuple[int, int, int]]:
 
 
 def _blend_color(fg: str, alpha: float, bg: str) -> str:
-    """Linear-interpolate *fg* over *bg* at opacity *alpha* ∈ [0, 1].
+    """Linear-interpolate *fg* over *bg* at opacity *alpha* in [0, 1].
 
     Both *fg* and *bg* must be ``'#RRGGBB'`` strings (pre-resolved via
     :func:`_resolve_color`).  Returns the blended ``'#RRGGBB'`` string, or
@@ -184,7 +184,7 @@ class CanvasGrid:
 
     The grid is always drawn below all rectangle and attached-item canvas
     objects.  It survives arbitrary zoom and pan without drifting, merging,
-    or becoming invisible because it is never canvas-scaled — it is always
+    or becoming invisible because it is never canvas-scaled - it is always
     redrawn from scratch using the current logical-to-canvas coordinate
     transform.
 
@@ -207,7 +207,7 @@ class CanvasGrid:
     --------------------
     When ``show_origin=True``, the x=0 and y=0 grid lines are drawn in a
     separate, more prominent style (``origin_color``, ``origin_linewidth``)
-    and are unaffected by the adaptive spacing logic — they are always visible
+    and are unaffected by the adaptive spacing logic - they are always visible
     as long as the origin is within the viewport.
 
     Linestyles
@@ -252,7 +252,7 @@ class CanvasGrid:
             units.  Default: ``50.0``.
         subdivisions: Number of minor grid cells per major interval.
             Default: ``5``.
-        color: Major-line color — any tkinter color name or ``'#RRGGBB'`` hex.
+        color: Major-line color - any tkinter color name or ``'#RRGGBB'`` hex.
             Default: ``"#aaaaaa"``.
         alpha: Major-line opacity in [0, 1].  Approximated via background
             blending.  Default: ``1.0``.
@@ -422,7 +422,7 @@ class CanvasGrid:
         """
         self._apply_spacing_kwargs(kwargs)
 
-        # Validate and apply linestyles (loop keeps branch count ≤ 12).
+        # Validate and apply linestyles (loop keeps branch count <= 12).
         for ls_kwarg, ls_attr in (
             ("linestyle", "_linestyle"),
             ("minor_linestyle", "_minor_linestyle"),
@@ -553,7 +553,7 @@ class CanvasGrid:
         """Validate and consume ``spacing`` and ``subdivisions`` from *kwargs*.
 
         Extracted to keep :meth:`configure` within the ruff PLR0912 branch
-        limit (≤ 12 branches).
+        limit (<= 12 branches).
         """
         if "spacing" in kwargs:
             v = float(kwargs.pop("spacing"))
@@ -752,7 +752,7 @@ class CanvasGrid:
                 origin_color,
             )
 
-        # --- Z-order: minor → major → rectangles (bottom to top) -----------
+        # --- Z-order: minor -> major -> rectangles (bottom to top) -----------
         # lower(_TAG_MAJOR) pushes major below all non-grid items.
         # lower(_TAG_MINOR) pushes minor below major.
         canvas.lower(_TAG_MAJOR)
@@ -763,7 +763,7 @@ class CanvasGrid:
     # -------------------------------------------------------------------------
 
     def _adaptive_spacing(self, base: float, zoom: float) -> float:
-        """Compute the effective logical spacing so pixel pitch ∈ [min, max].
+        """Compute the effective logical spacing so pixel pitch in [min, max].
 
         Doubles the spacing when lines are too dense (pixel pitch < min);
         halves it when they are too sparse (pixel pitch > max), but never
@@ -779,14 +779,14 @@ class CanvasGrid:
         effective = base
         px = effective * zoom
 
-        # Too dense → increase spacing (fewer lines).
+        # Too dense -> increase spacing (fewer lines).
         for _ in range(_MAX_ADAPT_ITERS):
             if px >= self._min_px_spacing:
                 break
             effective *= 2.0
             px *= 2.0
 
-        # Too sparse → decrease spacing (more lines), only if halving stays
+        # Too sparse -> decrease spacing (more lines), only if halving stays
         # above the minimum pixel threshold.
         for _ in range(_MAX_ADAPT_ITERS):
             if px <= self._max_px_spacing:
@@ -836,8 +836,8 @@ class CanvasGrid:
             logical_spacing: Spacing between consecutive lines in logical units.
             lx0, ly0, lx1, ly1: Logical-space viewport bounds.
             vx0, vy0, vx1, vy1: Canvas-space viewport bounds (line endpoints).
-            zoom: Current zoom level (logical → canvas scale factor).
-            ox, oy: Canvas origin offsets (logical → canvas translation).
+            zoom: Current zoom level (logical -> canvas scale factor).
+            ox, oy: Canvas origin offsets (logical -> canvas translation).
             dash: Tkinter dash tuple (empty = solid).
             width: Line width in screen pixels.
             color: Pre-blended fill color string.
@@ -852,7 +852,7 @@ class CanvasGrid:
         if (ly1 - ly0) / logical_spacing > _MAX_LINES_PER_AXIS:
             return
 
-        # Bind create_line once — avoids repeated attribute lookup inside loops.
+        # Bind create_line once - avoids repeated attribute lookup inside loops.
         create_line = self._canvas.create_line
 
         # Build the shared keyword dict once for this layer.
@@ -922,7 +922,7 @@ class CanvasGrid:
 
 
 # ---------------------------------------------------------------------------
-# GridSnap — grid magnetism for move and resize operations
+# GridSnap - grid magnetism for move and resize operations
 # ---------------------------------------------------------------------------
 
 
@@ -933,9 +933,9 @@ class GridSnap:
     ``InteractiveCanvas`` after-hooks.  The snap correction is computed in
     canvas-space (accounting for zoom and pan), applied to **all** selected
     rectangles together so multi-selection layouts are preserved, and is
-    visually instant — elements snap as the drag happens, not on release.
+    visually instant - elements snap as the drag happens, not on release.
 
-    Snap algorithm — ideal-position tracking
+    Snap algorithm - ideal-position tracking
     -----------------------------------------
     The key design insight: snap must be computed against the *ideal* position
     (where the element would be without any snap correction), not the post-snap
@@ -966,7 +966,7 @@ class GridSnap:
     4. Bring the element from its current canvas position to
        ``ideal + correction`` in a single ``canvas.move`` call.
 
-    With ``snap_ratio=0.5`` the threshold is half the pixel pitch — the element
+    With ``snap_ratio=0.5`` the threshold is half the pixel pitch - the element
     always snaps to the nearest line and jumps to the next one when the mouse
     crosses the midpoint (hard-snap, Figma-style).  Smaller values give a soft
     magnet that engages only near lines.
@@ -977,7 +977,7 @@ class GridSnap:
     Effective spacing
     -----------------
     When a :class:`CanvasGrid` is linked (the common case), the snap uses the
-    same adaptive spacing the grid displays — zooming in automatically reveals
+    same adaptive spacing the grid displays - zooming in automatically reveals
     finer snap resolution.  When used standalone, the same adaptive algorithm
     is applied to the configured ``spacing``.
 
@@ -1149,7 +1149,7 @@ class GridSnap:
             self._hook_callbacks.append((hook, fn, "after"))
 
     # -------------------------------------------------------------------------
-    # Snap calculation (hot path — called at ~60 Hz during drag)
+    # Snap calculation (hot path - called at ~60 Hz during drag)
     # -------------------------------------------------------------------------
 
     def _get_effective_spacing(self, zoom: float) -> float:
@@ -1234,7 +1234,7 @@ class GridSnap:
         return corr_dx, corr_dy
 
     # -------------------------------------------------------------------------
-    # Hook callbacks — drag lifecycle
+    # Hook callbacks - drag lifecycle
     # -------------------------------------------------------------------------
 
     def _on_rect_click(self, rect: Any, event: Any) -> None:
@@ -1247,7 +1247,7 @@ class GridSnap:
         self._drag_click_rect[rid] = (rc[0], rc[1])
 
     def _on_rect_drag(self, rect: Any, event: Any) -> None:
-        """After-hook for ``rect_on_drag`` — snap with ideal-position tracking.
+        """After-hook for ``rect_on_drag`` - snap with ideal-position tracking.
 
         Computes the ideal TL (accumulated mouse delta from click origin),
         snaps it to the nearest grid line, then moves all selected objects from
@@ -1299,7 +1299,7 @@ class GridSnap:
         self._drag_click_rect.pop(rid, None)
 
     # -------------------------------------------------------------------------
-    # Hook callbacks — resize lifecycle
+    # Hook callbacks - resize lifecycle
     # -------------------------------------------------------------------------
 
     def _on_rect_resize_click(self, rect: Any, event: Any) -> None:
@@ -1312,7 +1312,7 @@ class GridSnap:
         self._resize_click_rect[rid] = (rc[2], rc[3])
 
     def _on_rect_resize_drag(self, rect: Any, event: Any) -> None:
-        """After-hook for ``rect_on_resize_drag`` — snap BR with ideal tracking.
+        """After-hook for ``rect_on_resize_drag`` - snap BR with ideal tracking.
 
         Mirrors ``_on_rect_drag`` but operates on the bottom-right corner
         (resize anchor).  Enforces minimum 1 px size on every selected rect so

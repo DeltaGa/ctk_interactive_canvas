@@ -34,17 +34,17 @@ class CanvasBindings:
     Override individual fields by passing keyword arguments to the constructor.
 
     Groups:
-        Mouse — common left- and middle-button sequences used at both the
+        Mouse - common left- and middle-button sequences used at both the
             canvas level and the rectangle/resize-handle ``tag_bind`` level.
-        Keyboard modifiers — Shift, Alt, and Ctrl press/release sequences
+        Keyboard modifiers - Shift, Alt, and Ctrl press/release sequences
             consumed by ``DraggableRectangle`` for drag and resize constraints.
-        Keyboard actions — Space (panning toggle) and Delete (object removal).
-        History — undo/redo keyboard shortcuts bound by ``InteractiveCanvas``.
-        Zoom — keyboard and mouse-wheel zoom shortcuts.
+        Keyboard actions - Space (panning toggle) and Delete (object removal).
+        History - undo/redo keyboard shortcuts bound by ``InteractiveCanvas``.
+        Zoom - keyboard and mouse-wheel zoom shortcuts.
     """
 
     # ------------------------------------------------------------------
-    # Mouse — shared by canvas-level bind() and rectangle tag_bind()
+    # Mouse - shared by canvas-level bind() and rectangle tag_bind()
     # ------------------------------------------------------------------
     mouse_left_click: str = "<Button-1>"
     mouse_left_drag: str = "<B1-Motion>"
@@ -103,5 +103,5 @@ class CanvasBindings:
     duplicate_upper: str = "<Control-D>"
 
 
-#: Module-level default instance — used when no custom bindings are supplied.
+#: Module-level default instance - used when no custom bindings are supplied.
 DEFAULT_BINDINGS: CanvasBindings = CanvasBindings()

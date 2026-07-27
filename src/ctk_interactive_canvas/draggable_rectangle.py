@@ -116,7 +116,7 @@ class DraggableRectangle:
 
         self.keyboard_state = canvas._keyboard_state
 
-        # Cache once at init — avoids repeated hasattr() string lookups on
+        # Cache once at init - avoids repeated hasattr() string lookups on
         # the hot paths (on_drag / on_resize_drag fire at ~60 Hz).
         self._has_dispatch: bool = hasattr(canvas, "_dispatch_rect")
         self._has_move_attached: bool = hasattr(canvas, "move_attached_items")
@@ -1142,7 +1142,7 @@ class DraggableRectangle:
         ox, oy = (relative_pos[0], relative_pos[1]) if relative_pos is not None else (0.0, 0.0)
 
         # Pre-fetch all coords in one pass (1 tkinter call per rect instead of 2-3)
-        # Use id(r) as keys — DraggableRectangle.__hash__ is mutable (coord-based)
+        # Use id(r) as keys - DraggableRectangle.__hash__ is mutable (coord-based)
         cache = {id(r): r.canvas.coords(r.rect) for r in rectangles}
 
         fc = cache[id(rectangles[0])]
@@ -1198,7 +1198,7 @@ class DraggableRectangle:
         ox, oy = (relative_pos[0], relative_pos[1]) if relative_pos is not None else (0.0, 0.0)
 
         # Pre-fetch all coords in one pass
-        # Use id(r) as keys — DraggableRectangle.__hash__ is mutable (coord-based)
+        # Use id(r) as keys - DraggableRectangle.__hash__ is mutable (coord-based)
         cache = {id(r): r.canvas.coords(r.rect) for r in rectangles}
 
         if mode == "horizontal":
@@ -1319,7 +1319,7 @@ class DraggableRectangle:
         Handle dragging the rectangle.
 
         Modifier keys:
-            Shift: Lock movement to 45-degree angles (0°, 45°, 90°, 135°, etc.)
+            Shift: Lock movement to 45-degree angles (0 deg, 45 deg, 90 deg, 135 deg, etc.)
         """
         if self._has_dispatch:
             self.canvas._dispatch_rect("rect_on_drag", self, self._builtin_on_drag, event)

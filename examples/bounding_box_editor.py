@@ -78,7 +78,7 @@ class BoundingBoxEditor:
         self._setup_ui()
         self._bind_shortcuts()
 
-    # ─── UI ─────────────────────────────────────────────────────────────
+    # --- UI -------------------------------------------------------------
 
     def _setup_ui(self):
         main = ctk.CTkFrame(self.root)
@@ -208,7 +208,7 @@ class BoundingBoxEditor:
     def _set_class(self, name: str):
         self.current_class = name
 
-    # ─── Image Loading (with track_image for zoom) ─────────────────────
+    # --- Image Loading (with track_image for zoom) ---------------------
 
     def _load_image(self):
         """
@@ -297,7 +297,7 @@ class BoundingBoxEditor:
             return [0.0, 0.0]
         return self.canvas.get_origin_pos(self.image_boundary_id)
 
-    # ─── Bounding Box Creation ──────────────────────────────────────────
+    # --- Bounding Box Creation ------------------------------------------
 
     def _add_bounding_box(self):
         """
@@ -354,7 +354,7 @@ class BoundingBoxEditor:
         self.stats_text.delete("1.0", "end")
         self.stats_text.insert("1.0", text)
 
-    # ─── Zoom ───────────────────────────────────────────────────────────
+    # --- Zoom -----------------------------------------------------------
 
     def _zoom_in(self):
         """Zoom in -- tracked images auto-rescale via PIL."""
@@ -366,7 +366,7 @@ class BoundingBoxEditor:
         self.canvas.zoom_out(1.25)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    # ─── Coordinate Conversion (canvas -> image-relative) ──────────────
+    # --- Coordinate Conversion (canvas -> image-relative) --------------
 
     def _canvas_to_image_coords(self, canvas_coords: List[float]) -> List[float]:
         """
@@ -386,7 +386,7 @@ class BoundingBoxEditor:
             (canvas_coords[3] - origin[1]) / effective_scale,
         ]
 
-    # ─── Export ─────────────────────────────────────────────────────────
+    # --- Export ---------------------------------------------------------
 
     def _export(self, fmt: str):
         if not self.annotations:
@@ -465,7 +465,7 @@ class BoundingBoxEditor:
             json.dump(coco, f, indent=2)
         print(f"COCO format exported to: {out}")
 
-    # ─── Save / Load Project ───────────────────────────────────────────
+    # --- Save / Load Project -------------------------------------------
 
     def _save_project(self):
         """Save all annotations with image-relative coordinates."""
@@ -556,7 +556,7 @@ class BoundingBoxEditor:
         except Exception as e:
             print(f"Error loading project: {e}")
 
-    # ─── Run ────────────────────────────────────────────────────────────
+    # --- Run ------------------------------------------------------------
 
     def run(self):
         print("Bounding Box Editor for Machine Learning")

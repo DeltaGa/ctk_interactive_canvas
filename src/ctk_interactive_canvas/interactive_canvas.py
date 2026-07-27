@@ -37,9 +37,9 @@ class InteractiveCanvas(ctk.CTkCanvas):
     Every public interaction method is a hookable point.  Use
     ``register_callback(hook_name, fn, mode)`` to intercept it:
 
-    * mode="before"   — fires *before* the built-in logic
-    * mode="after"    — fires *after* the built-in logic (default)
-    * mode="inplace"  — *replaces* the built-in logic entirely
+    * mode="before"   - fires *before* the built-in logic
+    * mode="after"    - fires *after* the built-in logic (default)
+    * mode="inplace"  - *replaces* the built-in logic entirely
 
     Rectangle-level hooks (``rect_on_*``) receive the originating
     ``DraggableRectangle`` as their first argument, followed by the
@@ -47,7 +47,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     Performance: the registry is a plain ``dict``.  When no callbacks are
     registered for a hook, ``_dispatch`` short-circuits after a single
-    O(1) ``dict.__contains__`` check — zero overhead on hot paths such as
+    O(1) ``dict.__contains__`` check - zero overhead on hot paths such as
     ``rect_on_drag`` / ``rect_on_resize_drag`` (~60 Hz).
 
     All valid hook names are listed in ``InteractiveCanvas._HOOKABLE_METHODS``.
@@ -156,7 +156,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.select_outline_color = select_outline_color
         self.selected_objects: Dict[int, DraggableRectangle] = {}
         self.objects: Dict[int, DraggableRectangle] = {}
-        # O(1) reverse lookups: id(rect) → item_id, and registered set
+        # O(1) reverse lookups: id(rect) -> item_id, and registered set
         self._rect_to_id: Dict[int, int] = {}
         self._registered_rects: Set[int] = set()
         self.dpi = dpi
@@ -177,7 +177,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         # Dynamic callback registry: {hook_name: {mode: [(callable, suppress_during_restore)]}}
         self._callbacks: Dict[str, Dict[str, List[Tuple[Callable, bool]]]] = {}
 
-        # Clipboard — internal snapshot list for copy/cut/paste/duplicate.
+        # Clipboard - internal snapshot list for copy/cut/paste/duplicate.
         # Each entry mirrors the save_state() per-object format.
         self._clipboard: List[Dict] = []
 
@@ -230,13 +230,13 @@ class InteractiveCanvas(ctk.CTkCanvas):
             callback: Callable to invoke.  Rectangle-level hooks (``rect_on_*``)
                 receive the ``DraggableRectangle`` as their first argument.
             mode: One of:
-                * ``"before"``        — called *before* the built-in logic.
-                * ``"after"``         — called *after* the built-in logic (default).
-                * ``"inplace"``       — *replaces* the built-in logic entirely.
+                * ``"before"``        - called *before* the built-in logic.
+                * ``"after"``         - called *after* the built-in logic (default).
+                * ``"inplace"``       - *replaces* the built-in logic entirely.
                   Only the first registered inplace callback is used.
-                * ``"after_result"``  — called *after* the built-in logic with
+                * ``"after_result"``  - called *after* the built-in logic with
                   ``result`` prepended as the first positional argument.  Use
-                  this mode when you need the operation's return value —
+                  this mode when you need the operation's return value -
                   e.g. the newly created ``DraggableRectangle`` list from
                   ``paste`` / ``duplicate`` / ``copy``, the deleted rect from
                   ``delete_draggable_rectangle``, or the created rect from
@@ -644,7 +644,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         draggable_rect = DraggableRectangle(self, x1, y1, x2, y2, **kwargs)
 
-        # Build a set of existing rect canvas IDs once — O(n) upfront so the
+        # Build a set of existing rect canvas IDs once - O(n) upfront so the
         # inner check per repetition is O(|overlapping_items|) via set intersection.
         existing_rect_ids: Set[int] = {
             obj.rect for obj in self.objects.values() if obj is not draggable_rect
@@ -1198,7 +1198,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
             self._restore_state(self.history_states[self.history_index])
 
     # -------------------------------------------------------------------------
-    # Clipboard — copy / cut / paste / duplicate
+    # Clipboard - copy / cut / paste / duplicate
     # -------------------------------------------------------------------------
 
     def copy(self) -> List["DraggableRectangle"]:
@@ -1442,7 +1442,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         to this rectangle remain valid after an undo/redo operation.
 
         Attached items are restored via full reconciliation (delete + recreate
-        from snapshot), which handles all cases correctly — items added, removed,
+        from snapshot), which handles all cases correctly - items added, removed,
         or repositioned between states.  Falls back to dx/dy movement for
         history states saved before attached-item snapshots were introduced.
 
@@ -1503,8 +1503,8 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
         When a rectangle is removed during undo (surplus step), its Python object
         is kept alive inside the history snapshot via the ``rect_ref`` field.
-        On redo, rather than creating a brand-new DraggableRectangle — which
-        would silently break every caller-held reference — this method:
+        On redo, rather than creating a brand-new DraggableRectangle - which
+        would silently break every caller-held reference - this method:
 
         1. Re-creates the two canvas items (rectangle + resize handle) with fresh
            canvas IDs stored directly on ``rect.rect`` / ``rect.resize_handle``.
@@ -1585,15 +1585,15 @@ class InteractiveCanvas(ctk.CTkCanvas):
         references to DraggableRectangle objects), this method reconciles the
         live canvas against the saved state in three targeted steps:
 
-        1. Update in-place — items whose item_id exists in both the current
+        1. Update in-place - items whose item_id exists in both the current
            canvas and the saved state are mutated directly (geometry + visuals).
            The Python object is not replaced, so all caller-held references
            remain valid after undo/redo.
 
-        2. Delete surplus — items present only in the current canvas (not in
+        2. Delete surplus - items present only in the current canvas (not in
            the saved state) are removed, suppressing user callbacks.
 
-        3. Resurrect missing — items present only in the saved state (previously
+        3. Resurrect missing - items present only in the saved state (previously
            deleted by the user) are recreated as new DraggableRectangle instances
            and registered under their original item_id.
 
@@ -1616,22 +1616,22 @@ class InteractiveCanvas(ctk.CTkCanvas):
             current_ids = set(self.objects.keys())
             saved_ids = set(saved.keys())
 
-            # Step 1 — update surviving items in-place (preserves external references)
+            # Step 1 - update surviving items in-place (preserves external references)
             for item_id in current_ids & saved_ids:
                 self._update_rect_in_place(self.objects[item_id], saved[item_id])
 
-            # Step 2 — remove items that do not exist in the saved state
+            # Step 2 - remove items that do not exist in the saved state
             for item_id in list(current_ids - saved_ids):
                 self.delete_draggable_rectangle(item_id)
 
-            # Step 3 — resurrect items that exist in saved state but not currently.
+            # Step 3 - resurrect items that exist in saved state but not currently.
             # When rect_ref is present (v0.4.2+), reuse the original Python object
             # so every caller-held reference stays valid after undo/redo.
             for item_id in saved_ids - current_ids:
                 obj_data = saved[item_id]
                 rect_ref = obj_data.get("rect_ref")
                 if rect_ref is not None:
-                    # Resurrect the original object — canvas items are recreated,
+                    # Resurrect the original object - canvas items are recreated,
                     # events are rebound, but the Python identity is preserved.
                     self._resurrect_rect(rect_ref, obj_data)
                     self.objects[item_id] = rect_ref
@@ -1757,7 +1757,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         Register a canvas image item for automatic rescaling during zoom.
 
-        Tkinter's canvas.scale() does NOT resize images — it only moves their
+        Tkinter's canvas.scale() does NOT resize images - it only moves their
         anchor point. This method tracks the image so that zoom_in/zoom_out
         can perform proper PIL-based resizing.
 
@@ -1899,7 +1899,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
         """
         Capture metadata of all canvas items attached to a rectangle.
 
-        Returns a list of serialisable dictionaries — one per attached item —
+        Returns a list of serialisable dictionaries - one per attached item -
         containing enough information to recreate the items later via
         ``_recreate_attached_item()``.
 
@@ -2000,7 +2000,7 @@ class InteractiveCanvas(ctk.CTkCanvas):
     def add_grid(self, **kwargs: Any) -> CanvasGrid:
         """Create and attach an adaptive :class:`~ctk_interactive_canvas.CanvasGrid`.
 
-        The returned grid is fully self-managing — it registers its own zoom /
+        The returned grid is fully self-managing - it registers its own zoom /
         pan callbacks and redraws itself via ``after_idle`` whenever the view
         changes.  Call :meth:`~ctk_interactive_canvas.CanvasGrid.destroy` on
         the returned object to detach it.

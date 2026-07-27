@@ -57,7 +57,7 @@ def main():
     def show_intersection():
         intersection = rect1 & rect2
         if intersection:
-            info_label.configure(text=f"Intersection exists! Area: {intersection._area():.0f}px²")
+            info_label.configure(text=f"Intersection exists! Area: {intersection._area():.0f}px2")
         else:
             info_label.configure(text="No intersection between rectangles")
 

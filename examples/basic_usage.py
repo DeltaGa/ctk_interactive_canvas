@@ -41,7 +41,7 @@ def main():
     print("- Middle-mouse or Space+Drag to pan")
     print("- Delete key to remove selected")
     print("\nModifier keys:")
-    print("- Shift during move: Lock to 45° angles")
+    print("- Shift during move: Lock to 45 deg angles")
     print("- Shift during resize: Maintain aspect ratio")
     print("- Ctrl during resize: Resize from center")
     print("- Alt during resize: Constrain to one axis")

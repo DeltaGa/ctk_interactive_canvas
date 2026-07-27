@@ -86,7 +86,7 @@ class SeatingChartPlanner:
         self._create_room_boundary()
         self._load_default_layout()
 
-    # ─── UI Setup ───────────────────────────────────────────────────────
+    # --- UI Setup -------------------------------------------------------
 
     def _setup_ui(self):
         main = ctk.CTkFrame(self.root)
@@ -105,7 +105,7 @@ class SeatingChartPlanner:
     def _create_control_panel(self, parent):
         ctk.CTkLabel(parent, text="Seating Planner", font=("Arial", 18, "bold")).pack(pady=10)
 
-        # ── Venue info ──
+        # -- Venue info --
         venue = ctk.CTkFrame(parent)
         venue.pack(pady=10, padx=10, fill="x")
         ctk.CTkLabel(venue, text="Venue Dimensions:", font=("Arial", 12, "bold")).pack(pady=5)
@@ -115,7 +115,7 @@ class SeatingChartPlanner:
 
         self._sep(parent)
 
-        # ── Table creation ──
+        # -- Table creation --
         ctk.CTkLabel(parent, text="Add Table:", font=("Arial", 14, "bold")).pack(pady=5)
         for tt in TABLE_TYPES:
             ctk.CTkButton(parent, text=tt, command=lambda t=tt: self._add_table(t), height=35).pack(
@@ -124,7 +124,7 @@ class SeatingChartPlanner:
 
         self._sep(parent)
 
-        # ── Category selection ──
+        # -- Category selection --
         ctk.CTkLabel(parent, text="Table Category:", font=("Arial", 14, "bold")).pack(pady=5)
         self.category_var = ctk.StringVar(value="General")
         for cat, color in TABLE_COLORS.items():
@@ -139,7 +139,7 @@ class SeatingChartPlanner:
 
         self._sep(parent)
 
-        # ── Alignment / Distribution ──
+        # -- Alignment / Distribution --
         ctk.CTkLabel(parent, text="Tools:", font=("Arial", 14, "bold")).pack(pady=5)
         ctk.CTkButton(
             parent, text="Align Selected", command=lambda: self._align_selected("center"), height=35
@@ -159,7 +159,7 @@ class SeatingChartPlanner:
 
         self._sep(parent)
 
-        # ── Zoom ──
+        # -- Zoom --
         ctk.CTkLabel(parent, text="Zoom:", font=("Arial", 14, "bold")).pack(pady=5)
         zf = ctk.CTkFrame(parent)
         zf.pack(padx=10, fill="x")
@@ -172,7 +172,7 @@ class SeatingChartPlanner:
 
         self._sep(parent)
 
-        # ── Export / Save / Load ──
+        # -- Export / Save / Load --
         export = ctk.CTkFrame(parent)
         export.pack(pady=5, padx=10, fill="x")
         ctk.CTkButton(
@@ -212,7 +212,7 @@ class SeatingChartPlanner:
         )
         self.canvas.pack(fill="both", expand=True)
 
-    # ─── Room Boundary (Origin Rectangle) ──────────────────────────────
+    # --- Room Boundary (Origin Rectangle) ------------------------------
 
     def _create_room_boundary(self):
         """
@@ -270,7 +270,7 @@ class SeatingChartPlanner:
         """
         return self.canvas.get_origin_pos(self.room_rect_id)
 
-    # ─── Default Wedding Layout ──────────────────────────────────────────
+    # --- Default Wedding Layout ------------------------------------------
 
     def _load_default_layout(self):
         """
@@ -287,7 +287,7 @@ class SeatingChartPlanner:
         origin = self._get_room_origin()
         room_cx = self.room_width_m / 2  # 12.5m center
 
-        # ── Altar / Stage (non-interactive canvas rectangle) ──
+        # -- Altar / Stage (non-interactive canvas rectangle) --
         altar_w, altar_h = 6, 2  # meters
         ax1 = (room_cx - altar_w / 2) * PIXELS_PER_METER + origin[0]
         ay1 = 1.0 * PIXELS_PER_METER + origin[1]
@@ -312,7 +312,7 @@ class SeatingChartPlanner:
             tags="decor_altar",
         )
 
-        # ── Red-Carpet Aisle (non-interactive canvas rectangle) ──
+        # -- Red-Carpet Aisle (non-interactive canvas rectangle) --
         carpet_w = 1.2  # meters wide
         carpet_top = 3.5  # starts just below the altar
         carpet_bottom = 19.0  # extends almost to the back
@@ -331,7 +331,7 @@ class SeatingChartPlanner:
             tags="decor_carpet",
         )
 
-        # ── Helper to place a table ──
+        # -- Helper to place a table --
         def place_table(pos_m, table_type, category, number):
             info = TABLE_TYPES[table_type]
             size_px = (info["width"], info["height"])
@@ -355,12 +355,12 @@ class SeatingChartPlanner:
             self.tables[item_id] = (rect, table)
             self._render_table_label(rect, table)
 
-        # ── VIP / Head Table (Long Table near the altar) ──
+        # -- VIP / Head Table (Long Table near the altar) --
         self.table_counter += 1
         place_table((room_cx, 4.5), "Long Table", "VIP", self.table_counter)
 
-        # ── Bride's Side (left of aisle) ──
-        # Family tables — closest to aisle (Round 8)
+        # -- Bride's Side (left of aisle) --
+        # Family tables - closest to aisle (Round 8)
         bride_family_positions = [
             (8.5, 7.0),
             (8.5, 10.0),
@@ -370,7 +370,7 @@ class SeatingChartPlanner:
             self.table_counter += 1
             place_table(pos, "Round 8", "Family", self.table_counter)
 
-        # Friends tables — farther from aisle (Round 10)
+        # Friends tables - farther from aisle (Round 10)
         bride_friends_positions = [
             (4.5, 7.0),
             (4.5, 10.0),
@@ -380,8 +380,8 @@ class SeatingChartPlanner:
             self.table_counter += 1
             place_table(pos, "Round 10", "Friends", self.table_counter)
 
-        # ── Groom's Side (right of aisle) — mirror layout ──
-        # Family tables — closest to aisle (Round 8)
+        # -- Groom's Side (right of aisle) - mirror layout --
+        # Family tables - closest to aisle (Round 8)
         groom_family_positions = [
             (16.5, 7.0),
             (16.5, 10.0),
@@ -391,7 +391,7 @@ class SeatingChartPlanner:
             self.table_counter += 1
             place_table(pos, "Round 8", "Family", self.table_counter)
 
-        # Friends tables — farther from aisle (Round 10)
+        # Friends tables - farther from aisle (Round 10)
         groom_friends_positions = [
             (20.5, 7.0),
             (20.5, 10.0),
@@ -401,7 +401,7 @@ class SeatingChartPlanner:
             self.table_counter += 1
             place_table(pos, "Round 10", "Friends", self.table_counter)
 
-        # ── General tables at the back ──
+        # -- General tables at the back --
         general_positions = [
             (5.0, 17.0),
             (10.0, 17.0),
@@ -412,7 +412,7 @@ class SeatingChartPlanner:
             self.table_counter += 1
             place_table(pos, "Rectangular", "General", self.table_counter)
 
-    # ─── Table Creation ─────────────────────────────────────────────────
+    # --- Table Creation -------------------------------------------------
 
     def _add_table(self, table_type: str):
         """
@@ -466,7 +466,7 @@ class SeatingChartPlanner:
         self.canvas.attach_text_to_rectangle(t1, rect)
         self.canvas.attach_text_to_rectangle(t2, rect)
 
-    # ─── Alignment / Distribution (using relative_pos) ──────────────────
+    # --- Alignment / Distribution (using relative_pos) ------------------
 
     def _align_selected(self, mode: str):
         """Align tables relative to the room origin."""
@@ -486,7 +486,7 @@ class SeatingChartPlanner:
         DraggableRectangle.distribute(selected, mode=mode, relative_pos=origin)
         self.canvas.save_state()
 
-    # ─── Zoom ───────────────────────────────────────────────────────────
+    # --- Zoom -----------------------------------------------------------
 
     def _zoom_in(self):
         self.canvas.zoom_in(1.25)
@@ -496,7 +496,7 @@ class SeatingChartPlanner:
         self.canvas.zoom_out(1.25)
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-    # ─── Coordinate Conversion (canvas <-> room-relative meters) ───────
+    # --- Coordinate Conversion (canvas <-> room-relative meters) -------
 
     def _canvas_to_room_meters(self, rect: DraggableRectangle) -> Tuple[float, float]:
         """
@@ -525,7 +525,7 @@ class SeatingChartPlanner:
             cy + size_px[1] / 2,
         )
 
-    # ─── Save / Load ────────────────────────────────────────────────────
+    # --- Save / Load ----------------------------------------------------
 
     def _save_layout(self):
         """Save layout with positions in room-relative meters."""
@@ -640,7 +640,7 @@ class SeatingChartPlanner:
 
         print(f"Guest list exported to: {out}")
 
-    # ─── Run ────────────────────────────────────────────────────────────
+    # --- Run ------------------------------------------------------------
 
     def run(self):
         print("Seating Chart Planner")

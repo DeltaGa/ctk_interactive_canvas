@@ -1,60 +1,66 @@
-# CTk Interactive Canvas
+[![CodeFactor](https://www.codefactor.io/repository/github/deltaga/ctk_interactive_canvas/badge)](https://www.codefactor.io/repository/github/deltaga/ctk_interactive_canvas)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/ctk-interactive-canvas.svg)](https://pypi.python.org/pypi/ctk-interactive-canvas)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-<a href="https://www.codefactor.io/repository/github/deltaga/ctk_interactive_canvas"><img src="https://www.codefactor.io/repository/github/deltaga/ctk_interactive_canvas/badge" alt="CodeFactor" /></a>
-<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/badge/python-3.9+-blue.svg?style=flat" alt="Python version"></a>
-<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/v/ctk-interactive-canvas.svg?maxAge=60%" alt="PyPi version"></a>
-<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/status/ctk-interactive-canvas.svg?maxAge=60" alt="PyPi status"></a>
-<a target="new" href="https://pypi.python.org/pypi/ctk-interactive-canvas"><img border=0 src="https://img.shields.io/pypi/dm/ctk-interactive-canvas.svg?maxAge=86400&label=installs&color=%2327B1FF" alt="PyPi downloads"></a>
-<a target="new" href="https://github.com/DeltaGa/ctk_interactive_canvas"><img border=0 src="https://img.shields.io/github/stars/DeltaGa/ctk_interactive_canvas.svg?style=social&label=Star&maxAge=60" alt="Star this repo"></a>
+# CTk Interactive Canvas v0.9.0
 
-Interactive canvas widget for CustomTkinter with draggable, resizable rectangles featuring multi-selection, alignment, distribution, and professional-grade interaction controls.
+## Draggable, Resizable Rectangles for CustomTkinter
+
+**Version:** 0.9.0  
+**Release Date:** March 16, 2026  
+**Python:** 3.9+  
+**CustomTkinter:** 5.1.0+
+
+---
 
 ## Table of Contents
 
-- [Features](#features)
+- [Overview](#overview)
+- [System Requirements](#system-requirements)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Usage Examples](#usage-examples)
 - [Keyboard Modifiers](#keyboard-modifiers)
 - [API Reference](#api-reference)
-- [Requirements](#requirements)
 - [Development](#development)
-- [License](#license)
+- [Status](#status)
 - [Contributing](#contributing)
 - [Changelog](#changelog)
 - [Credits](#credits)
+- [License](#license)
 
-## Features
+---
 
-### Core Capabilities
-- **Draggable Rectangles**: Click and drag to move objects
-- **Resizable Objects**: Bottom-right handle for intuitive resizing
-- **Multi-Selection**: Shift-click or drag-select multiple objects
-- **Alignment Tools**: Align multiple rectangles (top, middle, bottom, start, center, end)
-- **Distribution Tools**: Evenly distribute rectangles horizontally or vertically
-- **Panning**: Middle-mouse or Space+drag to pan the canvas
+## Overview
 
-### Professional Controls
-- **Editor-style Constraints**:
-  - **Shift during move**: Lock to 45-degree angles (0°, 45°, 90°, 135°, etc.)
-  - **Shift during resize**: Maintain aspect ratio
-  - **Ctrl during resize**: Resize from center
-  - **Alt during resize**: Constrain to one dimension
-  - **Shift+Ctrl during resize**: Aspect ratio + center resize
+An interactive canvas widget for CustomTkinter. It provides draggable, resizable rectangles with multi-selection, alignment, distribution, panning, and zoom. Rectangles behave as geometric objects with a NumPy-like operator interface, so translation, scaling, intersection, and union are expressed directly in code.
 
-### Advanced Features
-- **26 Magic Methods**: NumPy-like interface for geometric operations
-- **Unit Conversion**: Built-in mm ↔ px conversion with DPI support
-- **Intersection & Union**: Geometric operations via `&` and `|` operators
-- **Point Containment**: Test if coordinates are inside rectangles
-- **Sorting & Comparison**: Area-based ordering and equality testing
-- **Coordinate Access**: Index-based access and iteration
+### Key Capabilities
+
+- **Direct manipulation** - Drag to move, resize from the bottom-right handle, multi-select by shift-click or drag-select
+- **Layout tools** - Align and distribute selected rectangles across six alignment modes and both axes
+- **Editor-style constraints** - Modifier keys lock angles, aspect ratio, center-anchoring, and single-axis resize
+- **Operator interface** - Arithmetic, comparison, bitwise intersection and union, and container access on rectangles
+- **Unit conversion** - Built-in millimeter and pixel conversion with DPI support
+- **History and zoom** - Undo/redo and viewport-anchored zoom, both configurable at construction
+
+---
+
+## System Requirements
+
+- **Python:** 3.9 or later
+- **CustomTkinter:** 5.1.0 or later
+
+---
 
 ## Installation
 
 ```bash
 pip install ctk-interactive-canvas
 ```
+
+---
 
 ## Quick Start
 
@@ -65,48 +71,32 @@ from ctk_interactive_canvas import InteractiveCanvas
 root = ctk.CTk()
 root.title("Interactive Canvas Demo")
 
-canvas = InteractiveCanvas(root, width=800, height=600, bg='white')
+canvas = InteractiveCanvas(root, width=800, height=600, bg="white")
 canvas.pack()
 
-rect1 = canvas.create_draggable_rectangle(50, 50, 150, 150, outline='blue', width=5)
-rect2 = canvas.create_draggable_rectangle(200, 200, 300, 300, outline='red', width=5)
+canvas.create_draggable_rectangle(50, 50, 150, 150, outline="blue", width=5)
+canvas.create_draggable_rectangle(200, 200, 300, 300, outline="red", width=5)
 
 root.mainloop()
 ```
 
+---
+
 ## Usage Examples
-
-### Basic Rectangle Creation
-
-```python
-canvas = InteractiveCanvas(root, width=800, height=600, bg='white')
-canvas.pack()
-
-rect = canvas.create_draggable_rectangle(
-    x1=100, y1=100,
-    x2=200, y2=200,
-    outline='blue',
-    width=5,
-    fill=''
-)
-```
 
 ### Selection Callbacks
 
 ```python
 def on_select():
-    selected = canvas.get_selected()
-    print(f"Selected: {len(selected)} objects")
+    print(f"Selected: {len(canvas.get_selected())} objects")
 
 def on_deselect():
     print("Selection cleared")
 
 canvas = InteractiveCanvas(
-    root,
-    width=800,
-    height=600,
+    root, width=800, height=600,
     select_callback=on_select,
-    deselect_callback=on_deselect
+    deselect_callback=on_deselect,
 )
 ```
 
@@ -115,68 +105,47 @@ canvas = InteractiveCanvas(
 ```python
 from ctk_interactive_canvas import DraggableRectangle
 
-rectangles = [rect1, rect2, rect3]
-
-DraggableRectangle.align(rectangles, mode='center')
-DraggableRectangle.distribute(rectangles, mode='horizontal')
+DraggableRectangle.align([rect1, rect2, rect3], mode="center")
+DraggableRectangle.distribute([rect1, rect2, rect3], mode="horizontal")
 ```
 
-### Mathematical Operations
+### Operator Interface
 
 ```python
-translated = rect + [50, 30]
+translated = rect + [50, 30]      # translate
+doubled = rect * 2                # scale
+intersection = rect1 & rect2      # geometric intersection
+bounding = rect1 | rect2          # bounding union
 
-doubled = rect * 2
+if [x, y] in rect:                # point containment
+    ...
 
-halved = rect / 2
-
-rect += [10, 10]
-
-intersection = rect1 & rect2
-bounding = rect1 | rect2
-
-if [x, y] in rect:
-    print("Point inside rectangle!")
-
-sorted_rects = sorted([rect1, rect2, rect3])
+sorted_rects = sorted([rect1, rect2, rect3])   # area-based ordering
 ```
 
 ### Unit Conversion
 
 ```python
-rect = canvas.create_draggable_rectangle(0, 0, 100, 100)
-
 pos_mm = rect.get_topleft_pos(in_mm=True, dpi=300)
-print(f"Position in mm: {pos_mm}")
-
 rect.set_size([50, 50], in_mm=True, dpi=300)
 ```
 
-### Coordinate Access
-
-```python
-x0, y0, x1, y1 = rect
-
-rect[2] = 300
-
-coords = rect[:]
-
-for coord in rect:
-    print(coord)
-```
+---
 
 ## Keyboard Modifiers
 
 | Action | Modifier | Behavior |
 |--------|----------|----------|
-| **Move** | Shift | Lock to 45° angles |
-| **Resize** | Shift | Maintain aspect ratio |
-| **Resize** | Ctrl | Resize from center |
-| **Resize** | Alt | Constrain to one axis |
-| **Resize** | Shift+Ctrl | Aspect ratio + center |
-| **Pan** | Space | Enable pan mode |
-| **Select** | Shift+Click | Add to selection |
-| **Delete** | Delete | Remove selected |
+| Move | Shift | Lock to 45-degree angles |
+| Resize | Shift | Maintain aspect ratio |
+| Resize | Ctrl | Resize from center |
+| Resize | Alt | Constrain to one axis |
+| Resize | Shift+Ctrl | Aspect ratio and center |
+| Pan | Space | Enable pan mode |
+| Select | Shift+Click | Add to selection |
+| Delete | Delete | Remove selected |
+
+---
 
 ## API Reference
 
@@ -188,97 +157,105 @@ InteractiveCanvas(
     select_callback=None,
     deselect_callback=None,
     delete_callback=None,
-    select_outline_color='#16fff6',
+    select_outline_color="#16fff6",
     dpi=300,
     create_bindings=True,
-    **kwargs
+    **kwargs,
 )
 ```
 
-**Methods**:
-- `create_draggable_rectangle(x1, y1, x2, y2, **kwargs)` → DraggableRectangle
-- `copy_draggable_rectangle(rect, offset=[21, 21], **kwargs)` → DraggableRectangle
-- `delete_draggable_rectangle(item_id)` → None
-- `get_selected()` → List[DraggableRectangle]
-- `get_draggable_rectangle(item_id)` → DraggableRectangle
-- `select_all()` → None
-- `deselect_all()` → None
+| Method | Returns |
+|--------|---------|
+| `create_draggable_rectangle(x1, y1, x2, y2, **kwargs)` | `DraggableRectangle` |
+| `copy_draggable_rectangle(rect, offset=[21, 21], **kwargs)` | `DraggableRectangle` |
+| `delete_draggable_rectangle(item_id)` | `DraggableRectangle | None` |
+| `get_draggable_rectangle(item_id)` | `DraggableRectangle` |
+| `get_selected()` | `List[DraggableRectangle]` |
+| `select_all()` / `deselect_all()` | `None` |
 
 ### DraggableRectangle
 
-**Position & Size**:
-- `get_topleft_pos(relative_pos=None, in_mm=False, dpi=None)` → [x, y]
+**Position and size**
+
+- `get_topleft_pos(relative_pos=None, in_mm=False, dpi=None)`
 - `set_topleft_pos(new_pos, relative_pos=None, in_mm=False, dpi=None)`
-- `get_size(in_mm=False, dpi=None)` → [width, height]
+- `get_size(in_mm=False, dpi=None)`
 - `set_size(new_size, in_mm=False, dpi=None)`
 
-**Transformations**:
-- `safe_rotate(angle, anchor='topleft')` - Rotate 90°/180°/-90°/-180°
-- `copy_(offset=[50, 50], **kwargs)` → DraggableRectangle
+**Transformations**
 
-**Class Methods**:
-- `align(rectangles, mode, relative_pos=None)` - Align multiple rectangles
-- `distribute(rectangles, mode, relative_pos=None)` - Distribute evenly
-- `compare(rect1, rect2)` → (bool, dict) - Compare two rectangles
-- `get_instances()` → List[DraggableRectangle] - Get all alive instances
+- `safe_rotate(angle, anchor="topleft")`
+- `copy_(offset=[50, 50], **kwargs)`
 
-**Magic Methods**:
-- Arithmetic: `+`, `-`, `*`, `/`, `+=`, `-=`, `*=`, `/=`
+**Class methods**
+
+- `align(rectangles, mode, relative_pos=None)`
+- `distribute(rectangles, mode, relative_pos=None)`
+- `compare(rect1, rect2)`
+- `get_instances()`
+
+**Operators**
+
+- Arithmetic: `+`, `-`, `*`, `/` and augmented forms
 - Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=`
 - Bitwise: `&` (intersection), `|` (union)
-- Unary: `-`, `+`, `abs()`
-- Container: `len()`, `[]`, `in`, `iter()`
-- Representation: `str()`, `repr()`, `format()`, `bool()`, `hash()`
+- Container: `len()`, `[]`, `in`, iteration
 
-## Requirements
-
-- Python ≥ 3.9
-- CustomTkinter ≥ 5.1.0
+---
 
 ## Development
 
-### Install Development Dependencies
-
 ```bash
+# Install with development dependencies
 pip install -e ".[dev]"
-```
 
-### Run Tests
-
-```bash
+# Run the test suite
 pytest
-```
 
-### Code Quality
-
-```bash
+# Format, lint, and type-check
 black .
 ruff check .
 mypy src/ctk_interactive_canvas
 ```
 
-## License
+---
 
-See [LICENSE](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/LICENSE) file for details.
+## Status
+
+This package is in active development (Beta). The public API may change between minor versions until the 1.0.0 release. See the [Changelog](CHANGELOG.md) for version history.
+
+---
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Code follows the conventions in [STYLE.md](STYLE.md) and [OPTIMIZATION.md](OPTIMIZATION.md).
+
+---
 
 ## Changelog
 
-See [CHANGELOG.md](https://github.com/DeltaGa/ctk_interactive_canvas/blob/main/CHANGELOG.md) for version history.
+Full version history is in [CHANGELOG.md](CHANGELOG.md).
+
+---
 
 ## Credits
 
 ### Author
-**T. K. Joram Smith (DeltaGa)**
-- Email: dev.github.tkjoramsmith@outlook.com
-- GitHub: [@DeltaGa](https://github.com/DeltaGa)
+
+**Tchicdje Kouojip Joram Smith (DeltaGa)**  
+Email: dev.github.tkjoramsmith@outlook.com  
+GitHub: [https://github.com/DeltaGa](https://github.com/DeltaGa)
 
 ### Acknowledgments
-- [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) - Modern UI framework
+
+- [**CustomTkinter**](https://github.com/TomSchimansky/CustomTkinter): The widget foundation this package builds on.
 
 ---
 
-**Note**: This package is in active development. APIs may change between minor versions until 1.0.0 release.
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+© 2026 DeltaGa. All rights reserved.

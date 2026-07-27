@@ -1,6 +1,6 @@
 """Unit conversion utilities for pixel/millimeter coordinate handling.
 
-Pure functions with no widget dependencies — safe to import anywhere.
+Pure functions with no widget dependencies - safe to import anywhere.
 Both functions mirror the instance-method API on ``DraggableRectangle``
 but operate on plain scalars and accept an explicit ``dpi`` argument,
 making them testable without a running canvas.
