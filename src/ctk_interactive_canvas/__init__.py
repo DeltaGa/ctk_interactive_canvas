@@ -15,7 +15,7 @@ from ._keyboard import KeyboardStateManager
 from .draggable_rectangle import DraggableRectangle
 from .interactive_canvas import InteractiveCanvas
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 __author__ = "Tchicdje Kouojip Joram Smith (DeltaGa)"
 __all__ = [
     "VALID_LINESTYLES",

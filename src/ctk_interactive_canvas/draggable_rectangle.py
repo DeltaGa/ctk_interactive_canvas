@@ -121,6 +121,10 @@ class DraggableRectangle:
         self._has_dispatch: bool = hasattr(canvas, "_dispatch_rect")
         self._has_move_attached: bool = hasattr(canvas, "move_attached_items")
         self._has_objects_changed: bool = hasattr(canvas, "_objects_changed")
+        # Existence of the pointer-capture gesture lock is constant for the
+        # life of the rect (set in the canvas __init__), so cache it once and
+        # keep the 60 Hz drag/resize hot paths to a single attribute read.
+        self._has_gesture_lock: bool = hasattr(canvas, "_active_gesture")
 
         self.canvas.tag_bind(self.rect, _b.mouse_left_click, self.on_click)
         self.canvas.tag_bind(self.rect, _b.mouse_left_drag, self.on_drag)
@@ -1311,6 +1315,11 @@ class DraggableRectangle:
             self._builtin_on_click(event)
 
     def _builtin_on_click(self, event: "Event") -> None:
+        # Claim the pointer for a body "move" gesture. The handle press claims
+        # "resize" instead; whichever item Tk delivers the ButtonPress to wins,
+        # and the loser's motion handler stands down until ButtonRelease.
+        if self._has_gesture_lock:
+            self.canvas._active_gesture = "move"
         self.start_x = event.x
         self.start_y = event.y
 
@@ -1321,6 +1330,14 @@ class DraggableRectangle:
         Modifier keys:
             Shift: Lock movement to 45-degree angles (0 deg, 45 deg, 90 deg, 135 deg, etc.)
         """
+        # Pointer-capture guard: if a resize gesture owns the pointer, the body
+        # move stands down entirely — even though Tk may have routed this
+        # B1-Motion to the body because the cursor slipped off the small handle
+        # glyph. This is the core fix for the resize-also-moves diagonal-drift
+        # bug. Placed here (before dispatch) so registered hooks stay inert too.
+        if self._has_gesture_lock and self.canvas._active_gesture == "resize":
+            return
+
         if self._has_dispatch:
             self.canvas._dispatch_rect("rect_on_drag", self, self._builtin_on_drag, event)
         else:
@@ -1368,6 +1385,10 @@ class DraggableRectangle:
             self._builtin_on_resize_click(event)
 
     def _builtin_on_resize_click(self, event: "Event") -> None:
+        # Claim the pointer for a "resize" gesture so any stray body on_drag
+        # fired during this interaction stands down (see _builtin_on_drag).
+        if self._has_gesture_lock:
+            self.canvas._active_gesture = "resize"
         self.resize_start_x = event.x
         self.resize_start_y = event.y
 
@@ -1381,6 +1402,12 @@ class DraggableRectangle:
             Alt: Constrain to one dimension (horizontal or vertical)
             Shift+Ctrl: Maintain aspect ratio AND resize from center
         """
+        # Pointer-capture guard: if a body move gesture owns the pointer, the
+        # resize stands down entirely. Symmetric counterpart to the guard in
+        # on_drag; placed before dispatch so registered hooks stay inert too.
+        if self._has_gesture_lock and self.canvas._active_gesture == "move":
+            return
+
         if self._has_dispatch:
             self.canvas._dispatch_rect(
                 "rect_on_resize_drag", self, self._builtin_on_resize_drag, event
@@ -1456,6 +1483,8 @@ class DraggableRectangle:
             self._builtin_on_drag_end(event)
 
     def _builtin_on_drag_end(self, event: "Event") -> None:
+        if self._has_gesture_lock:
+            self.canvas._active_gesture = None
         if hasattr(self.canvas, "_on_objects_changed"):
             self.canvas._on_objects_changed()
 
@@ -1474,6 +1503,8 @@ class DraggableRectangle:
             self._builtin_on_resize_end(event)
 
     def _builtin_on_resize_end(self, event: "Event") -> None:
+        if self._has_gesture_lock:
+            self.canvas._active_gesture = None
         if hasattr(self.canvas, "_on_objects_changed"):
             self.canvas._on_objects_changed()
 

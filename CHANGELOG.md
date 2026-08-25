@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-05-31
+
+### Fixed
+- **Resize handle no longer triggers a simultaneous move** (`draggable_rectangle.py`,
+  `interactive_canvas.py`): Clicking the bottom-right resize handle and dragging
+  could occasionally also fire the rectangle body's drag handler, translating the
+  rectangle diagonally instead of (or in addition to) resizing it. The root cause
+  was two independent Tk item-event streams — one bound to the rectangle body, one
+  to the resize-handle glyph — with no arbitration: once the cursor slipped off the
+  small handle glyph mid-resize, Tk routed `<B1-Motion>` to the overlapping body,
+  whose `on_drag` then ran with a stale `start_x`/`start_y`. Fixed with a
+  **pointer-capture gesture lock**: the first `ButtonPress` claims an exclusive
+  gesture (`"move"` or `"resize"`) on `InteractiveCanvas._active_gesture` that it
+  owns until `ButtonRelease`. Each motion handler stands down unless it owns the
+  gesture, so move and resize can never run at the same time. The capture is
+  released authoritatively on the canvas-level `<ButtonRelease-1>` (with defensive
+  clears in the per-rect end handlers). This mirrors the DOM Pointer Events
+  `setPointerCapture` model and the hit-arbitration used by Figma/Illustrator.
+
+### Performance
+- Gesture-lock existence is cached once per rectangle (`_has_gesture_lock`) so the
+  60 Hz drag/resize hot paths add only a single boolean check plus one attribute
+  read when no conflicting gesture is active — zero new tkinter calls.
+
 ## [0.9.0] - 2026-03-16
 
 ### Added

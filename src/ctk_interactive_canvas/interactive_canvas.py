@@ -167,6 +167,14 @@ class InteractiveCanvas(ctk.CTkCanvas):
         self.dragging: bool = False
         self.panning: bool = False
 
+        # Pointer-capture gesture arbitration. Only one interaction — a body
+        # "move" or a handle "resize" — may own the pointer between ButtonPress
+        # and ButtonRelease. The press claims the gesture; motion handlers that
+        # do not own it stand down. This prevents a resize-handle drag from also
+        # triggering a body translation (the diagonal-drift bug) when Tk routes
+        # stray B1-Motion events to the overlapping rectangle body.
+        self._active_gesture: Optional[str] = None
+
         self.next_item_id: int = 0
 
         # Internal flags
@@ -1008,6 +1016,10 @@ class InteractiveCanvas(ctk.CTkCanvas):
 
     def _builtin_on_drag_release(self, event: Event) -> None:
         self.dragging = False
+        # Authoritative gesture release: a ButtonRelease ends every pointer
+        # interaction, so clear the capture here regardless of which item the
+        # pointer happens to be over at release time.
+        self._active_gesture = None
         if self.selection_rect:
             self.delete(self.selection_rect)
             self.selection_rect = None
